@@ -8,19 +8,26 @@ import copy
 from tqdm import tqdm
 
 
+def _load_processed_data(path):
+    try:
+        return torch.load(path, weights_only=False)
+    except TypeError:
+        return torch.load(path)
+
+
 
 class GoRecDial(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None,flag="train"):
         super(GoRecDial, self).__init__(root, transform, pre_transform)
         self.flag=flag
         if self.flag=="test":
-            self.data, self.slices = torch.load(self.processed_paths[1])
+            self.data, self.slices = _load_processed_data(self.processed_paths[1])
         elif self.flag=="graph":
-            self.data, self.slices = torch.load(self.processed_paths[2])
+            self.data, self.slices = _load_processed_data(self.processed_paths[2])
         elif self.flag=="bow":
-            self.data, self.slices = torch.load(self.processed_paths[3])
+            self.data, self.slices = _load_processed_data(self.processed_paths[3])
         else:
-            self.data, self.slices = torch.load(self.processed_paths[0])
+            self.data, self.slices = _load_processed_data(self.processed_paths[0])
 
         self.train_size=8213
         self.test_size=909

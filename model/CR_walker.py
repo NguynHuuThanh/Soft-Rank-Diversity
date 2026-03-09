@@ -2,6 +2,7 @@
 import random
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import copy
 from torch_geometric.data import Data
 from utterance_embedder import Utterance_Embedder
@@ -13,7 +14,7 @@ from explicit_recommender import Explicit_Recommender
 
 class ProRec(nn.Module):
     #beta=tanh(QW+KU)*V
-    def __init__(self,device_str='cuda:1',rnn_type="RNN_TANH",use_bert=True,utter_embed_size=64,dropout=0.5,num_turns=10,num_relations=12,num_bases=15,graph_embed_size=64,atten_hidden=20,negative_sample_ratio=5,dataset="redial",word_net=False):
+    def __init__(self,device_str='cuda:1',rnn_type="RNN_TANH",use_bert=True,utter_embed_size=64,dropout=0.5,num_turns=10,num_relations=12,num_bases=15,graph_embed_size=64,atten_hidden=20,negative_sample_ratio=5,dataset="redial",word_net=False,div_loss_weight=0.0,div_temperature=0.1):
         super(ProRec,self).__init__()
         self.dataset=dataset
         if dataset=="redial":
@@ -37,6 +38,10 @@ class ProRec(nn.Module):
         self.num_bases=num_bases
         self.graph_embed_size=graph_embed_size
         self.atten_hidden=atten_hidden
+        
+        # Diversity loss hyperparameters
+        self.div_loss_weight=div_loss_weight
+        self.div_temperature=div_temperature
         
 
         self.device=torch.device(device_str)
@@ -62,6 +67,35 @@ class ProRec(nn.Module):
         self.Ww=nn.Linear(utter_embed_size,graph_embed_size,bias=False)
         #self.Wo=nn.Linear(1,self.num_nodes)
 
+
+    def compute_diversity_loss(self, scores, item_embeddings, mask=None):
+        """
+        Soft top-k diversity loss: penalises high pairwise cosine similarity
+        among the items that receive the most probability mass.
+
+        Args:
+            scores:          [B, M]  raw recommendation logits
+            item_embeddings: [M, d]  RGCN node embeddings for the M candidate items
+            mask:            [B, M]  optional binary mask (1 = valid candidate)
+        Returns:
+            scalar diversity loss (to be *minimized*)
+        """
+        tau = self.div_temperature
+        # Temperature-scaled softmax  →  soft item-selection weights  [B, M]
+        scaled = scores / tau
+        if mask is not None:
+            scaled = scaled + (1.0 - mask) * (-1e9)   # mask out invalid items
+        w = F.softmax(scaled, dim=-1)                  # [B, M]
+
+        # Cosine similarity matrix S = Ê Êᵀ  where Ê is row-normalised
+        normed = F.normalize(item_embeddings, p=2, dim=-1)  # [M, d]
+        # Efficient: compute Sw = S @ wᵀ row-by-row via (normed @ normed.T) @ w.T
+        #   = normed @ (normed.T @ w.T)   →  avoids materialising M×M matrix
+        #   inner: [d, M] @ [M, B] → [d, B]   then outer: [M, d] @ [d, B] → [M, B]
+        Sw = torch.mm(normed, torch.mm(normed.t(), w.t()))   # [M, B]
+        # Per-user weighted similarity: wᵢ · (Swᵢ)  →  sum over M
+        weighted_sim = (w * Sw.t()).sum(dim=-1)               # [B]
+        return weighted_sim.mean()
 
 
     def forward_pretrain(self,tokenized_dialog,all_length,maxlen,init_hidden,edge_type,edge_index,alignment_index,alignment_batch_index,alignment_label,intent_label,alignment_index_word=None,alignment_batch_index_word=None,alignment_label_word=None):
@@ -250,8 +284,8 @@ class ProRec(nn.Module):
 
         #if intent!=None:
         tokenized_dialog,all_length,maxlen,init_hidden,word_index,word_batch_index,raw_history = self.utter_embedder.prepare_data(dialog_history,self.device,raw_history=True)
-        edge_index=edge_index.to(device=self.device)
-        edge_type=edge_type.to(device=self.device)
+        edge_index=edge_index.long().to(device=self.device)
+        edge_type=edge_type.long().to(device=self.device)
         all_intent=["chat","question","recommend"]
         batch_size=len(intent)
         intent_label=torch.zeros(batch_size,device=self.device)
@@ -334,6 +368,44 @@ class ProRec(nn.Module):
         
 
         tot_loss=walk_loss_1+walk_loss_2+intent_loss+0.025*reg_loss#
+
+        # --- Diversity loss for ReDial ---
+        if self.div_loss_weight > 0:
+            # paths[1] contains second-hop logits over movie candidates
+            # sel_indices[1] has the candidate node ids, score_masks[1] masks valid ones
+            # We need to reshape per-group into per-batch-sample scores over movies
+            # For ReDial recommend turns: candidates are [0..movie_count-1] per group,
+            # so paths[1] is already a flat score vector per group.
+            # Use graph_embed restricted to movie nodes.
+            movie_count = self.null_idx if self.dataset == "redial" else self.null_idx
+            # Build per-sample score tensors over all movies from the groups
+            # Since the grouping is complex, we use a simpler approximation:
+            # For each batch element that has recommendation groups, accumulate
+            # scores into a [B, movie_count] tensor and apply diversity loss.
+            batch_size = utter_embed.size(0)
+            # Collect movie-level scores from layer-2 paths
+            # sel_indices[1] contains movie/node ids, grp_batch_indices[1] maps groups→batch
+            l2_scores = paths[1]          # flat [N2]
+            l2_sel    = sel_indices[1]     # flat [N2] node ids
+            l2_bat    = sel_batch_indices[1]  # flat [N2] batch idx
+            l2_mask   = score_masks[1]     # flat [N2]
+
+            # Build dense [batch_size, movie_count] tensors
+            mc = graph_embed.size(0)  # total nodes (use as upper bound)
+            dense_scores = torch.full((batch_size, mc), -1e9, device=self.device)
+            dense_mask = torch.zeros((batch_size, mc), device=self.device)
+            # Scatter scores into dense matrix
+            dense_scores[l2_bat, l2_sel] = torch.max(dense_scores[l2_bat, l2_sel], l2_scores)
+            dense_mask[l2_bat, l2_sel] = l2_mask
+
+            # Only keep samples that actually have recommendation candidates
+            has_rec = dense_mask.sum(dim=-1) > 0  # [batch_size]
+            if has_rec.any():
+                rec_scores = dense_scores[has_rec]   # [B', mc]
+                rec_mask   = dense_mask[has_rec]     # [B', mc]
+                div_loss = self.compute_diversity_loss(rec_scores, graph_embed, mask=rec_mask)
+                tot_loss = tot_loss + self.div_loss_weight * div_loss
+
         return intent,paths,tot_loss
 
     
@@ -377,6 +449,24 @@ class ProRec(nn.Module):
         
 
         tot_loss=walk_loss_1+walk_loss_2+intent_loss+rec_loss+0.025*reg_loss
+
+        # --- Diversity loss for GoRecDial ---
+        if self.div_loss_weight > 0:
+            # rec: [batch_size, 5] logits over 5 shuffled candidates
+            # rec_index: flat [batch_size*5] node ids of those candidates
+            batch_size = rec.size(0)
+            cand_ids = rec_index.view(batch_size, 5)          # [B, 5]
+            cand_embeds = graph_embed[cand_ids]                # [B, 5, d]
+            # Compute diversity per sample, then average
+            div_loss_sum = torch.tensor(0.0, device=self.device)
+            for b in range(batch_size):
+                div_loss_sum = div_loss_sum + self.compute_diversity_loss(
+                    rec[b:b+1],            # [1, 5]
+                    cand_embeds[b]          # [5, d]
+                )
+            div_loss = div_loss_sum / batch_size
+            tot_loss = tot_loss + self.div_loss_weight * div_loss
+
         return intent,paths,tot_loss
 
 
@@ -414,8 +504,8 @@ class ProRec(nn.Module):
     def prepare_data_redial(self,dialog_history,mention_history,intent,node_candidate1,node_candidate2,edge_type,edge_index,label1,label2,gold_pos,attribute_dict,sample=False):
         tokenized_dialog,all_length,maxlen,init_hidden,word_index,word_batch_index = self.utter_embedder.prepare_data(dialog_history,self.device)
         mention_index,mention_batch_index,sel_indices,sel_batch_indices,sel_group_indices,grp_batch_indices,last_indices,intent_indices,label_1,label_2,score_masks=self.graph_walker.prepare_data(mention_history,intent,node_candidate1,node_candidate2,label1,label2,attribute_dict,self.device,gold_pos,sample=sample,dataset="redial")
-        edge_index=edge_index.to(device=self.device)
-        edge_type=edge_type.to(device=self.device)
+        edge_index=edge_index.long().to(device=self.device)
+        edge_type=edge_type.long().to(device=self.device)
         all_intent=["chat","question","recommend"]
 
         
@@ -458,9 +548,9 @@ class ProRec(nn.Module):
     def prepare_data_gorecdial(self,dialog_history,mention_history,intent,node_candidate1,node_candidate2,edge_type,edge_index,label1,label2,attribute_dict,rec_cand,all_bows):
         tokenized_dialog,all_length,maxlen,init_hidden,word_index,word_batch_index= self.utter_embedder.prepare_data(dialog_history,self.device)
         mention_index,mention_batch_index,sel_indices,sel_batch_indices,sel_group_indices,grp_batch_indices,last_indices,intent_indices,label_1,label_2,score_masks=self.graph_walker.prepare_data(mention_history,intent,node_candidate1,node_candidate2,label1,label2,attribute_dict,self.device,sample=False,dataset="gorecdial")
-        edge_index=edge_index.to(device=self.device)
+        edge_index=edge_index.long().to(device=self.device)
         rec_index,rec_batch_index,rec_golden=self.explicit_recommender.prepare_data(rec_cand,self.device)
-        edge_type=edge_type.to(device=self.device)
+        edge_type=edge_type.long().to(device=self.device)
         all_intent=["chat","question","recommend"]
 
         batch_size=len(intent)

@@ -13,11 +13,117 @@ import random
 from CR_walker import ProRec
 from torch_geometric.data import DataLoader
 
-sys.path.append("..")
+PROJECT_ROOT = osp.abspath(osp.join(osp.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 from data.redial import ReDial
 from data.gorecdial import GoRecDial
 from data.metrics import bleu,f1_score,distinct_n_grams
 from data.utils import da_tree_serial,utter_lexical_redial,utter_lexical_gorecdial
+
+
+# ───────────────────────────────────────────────────────
+# Coverage metric helpers
+# ───────────────────────────────────────────────────────
+
+def compute_kg_coverage(topk_item_ids, movie_kg_neighbors, total_reachable_entities):
+    """
+    KG-Entity Coverage@k: fraction of reachable KG entities covered by
+    the 1-hop neighborhoods of the top-k items.
+    """
+    covered = set()
+    for item_id in topk_item_ids:
+        covered |= movie_kg_neighbors.get(item_id, set())
+    return len(covered) / total_reachable_entities
+
+
+def compute_cat_coverage(topk_item_ids, movie_kg_relation_types, total_relation_types):
+    """
+    Category Coverage@k: fraction of distinct directed relation types
+    represented in the 1-hop neighborhoods of the top-k items.
+    """
+    covered = set()
+    for item_id in topk_item_ids:
+        covered |= movie_kg_relation_types.get(item_id, set())
+    return len(covered) / total_relation_types
+
+
+def init_coverage_accumulators(k_values):
+    """Return fresh per-turn and per-dialog accumulator dicts for all k."""
+    acc = {}
+    for k in k_values:
+        acc[f'kg_cov_turn@{k}'] = []
+        acc[f'cat_cov_turn@{k}'] = []
+        acc[f'kg_cov_dialog@{k}'] = []
+        acc[f'cat_cov_dialog@{k}'] = []
+    return acc
+
+
+def accumulate_turn_coverage(acc, scores_array, item_ids, k_values, args):
+    """
+    Given a score array and corresponding item id list, compute coverage
+    for each k and append to the per-turn accumulator lists.
+    Returns the per-turn kg/cat values for the current turn (for dialog agg).
+    """
+    movie_kg_neighbors = args['movie_kg_neighbors']
+    movie_kg_relation_types = args['movie_kg_relation_types']
+    total_reachable = args['total_reachable_entities']
+    total_rel = args['total_relation_types']
+
+    # Rank item_ids by descending score
+    ranked_indices = sorted(range(len(scores_array)), key=lambda x: -scores_array[x])
+    ranked_items = [item_ids[i] for i in ranked_indices]
+
+    turn_vals = {}
+    for k in k_values:
+        topk = ranked_items[:k]
+        kg = compute_kg_coverage(topk, movie_kg_neighbors, total_reachable)
+        cat = compute_cat_coverage(topk, movie_kg_relation_types, total_rel)
+        acc[f'kg_cov_turn@{k}'].append(kg)
+        acc[f'cat_cov_turn@{k}'].append(cat)
+        turn_vals[k] = (kg, cat)
+    return turn_vals
+
+
+def finalize_coverage(acc, k_values):
+    """Average all accumulator lists and return a flat results dict."""
+    results = {}
+    for k in k_values:
+        for metric in ['kg_cov_turn', 'cat_cov_turn', 'kg_cov_dialog', 'cat_cov_dialog']:
+            key = f'{metric}@{k}'
+            vals = acc[key]
+            results[key] = sum(vals) / max(len(vals), 1)
+    return results
+
+
+def compute_item_coverage_redial(all_scores_list, n_movies):
+    """
+    Item Coverage@10 and Item Coverage@50 for ReDial.
+    Coverage@k = fraction of catalog items that appear at least once in
+    any sample's top-k recommendation list.
+    """
+    all_top10_items = set()
+    all_top50_items = set()
+
+    for scores in all_scores_list:
+        if len(scores) != n_movies:
+            continue
+        top50_idx = np.argsort(scores)[-50:]
+        top10_idx = top50_idx[-10:]
+        all_top10_items.update(top10_idx.tolist())
+        all_top50_items.update(top50_idx.tolist())
+
+    if n_movies > 0:
+        coverage_10 = len(all_top10_items) / n_movies
+        coverage_50 = len(all_top50_items) / n_movies
+    else:
+        coverage_10 = 0
+        coverage_50 = 0
+
+    return {
+        'item_coverage@10': coverage_10,
+        'item_coverage@50': coverage_50
+    }
 
 
 def select_intent(sel_intent,mentioned,args):
@@ -294,6 +400,13 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
     tot_rec=0
     tot=0
     
+    # Coverage accumulators
+    k_values = args.get('coverage_topk', [1, 10, 50])
+    cov_acc = init_coverage_accumulators(k_values)
+    # Per-dialog tracking: accumulate item ids recommended within a dialog
+    dialog_rec_items = []  # flat list of movie ids recommended so far in current dialog
+    # For Item Coverage@k across all recommend samples
+    all_scores_list = []
 
     batches=0
     model.eval()
@@ -358,6 +471,17 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
                 my_label=test_batch.label_rec[num]
                 wrong_count=[0 for _ in range(len(my_label))]
                 if test_batch.intent[num]=="recommend":
+                    # item_ids for ReDial are movie indices 0..movie_count-1
+                    item_ids = list(range(args['movie_count']))
+                    scores_arr = all_scores[num]
+                    all_scores_list.append(scores_arr)
+                    # Per-turn coverage
+                    turn_vals = accumulate_turn_coverage(cov_acc, scores_arr, item_ids, k_values, args)
+                    # Collect top-k items for dialog-level coverage (use max k)
+                    max_k = max(k_values)
+                    ranked = sorted(range(len(scores_arr)), key=lambda x: -scores_arr[x])
+                    dialog_rec_items.extend([item_ids[i] for i in ranked[:max_k]])
+
                     for item in all_scores[num]:
                         for p,idx in enumerate(my_label):
                             if item>=all_scores[num][idx]:
@@ -371,6 +495,16 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
                         if item<51:
                             recall_50+=1
 
+                # Dialog boundary: flush dialog-level coverage
+                if test_batch.last_turn[num]==1 and len(dialog_rec_items) > 0:
+                    for k in k_values:
+                        topk_dialog = dialog_rec_items[:k] if len(dialog_rec_items) >= k else dialog_rec_items
+                        kg = compute_kg_coverage(topk_dialog, args['movie_kg_neighbors'], args['total_reachable_entities'])
+                        cat = compute_cat_coverage(topk_dialog, args['movie_kg_relation_types'], args['total_relation_types'])
+                        cov_acc[f'kg_cov_dialog@{k}'].append(kg)
+                        cov_acc[f'cat_cov_dialog@{k}'].append(cat)
+                    dialog_rec_items = []
+
             if batches==eval_batch:
                 break
             batches+=1
@@ -380,12 +514,17 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
     recall_10=recall_10/tot_rec
     recall_50=recall_50/tot_rec
 
+    coverage_results = finalize_coverage(cov_acc, k_values)
+    item_coverage_results = compute_item_coverage_redial(all_scores_list, args['movie_count'])
+    coverage_results.update(item_coverage_results)
 
     print("recall_1",recall_1)
     print('recall_10:',recall_10)
     print("recall_50:",recall_50)
+    for key, val in sorted(coverage_results.items()):
+        print(f"{key}: {val:.4f}")
 
-    return recall_1,recall_10,recall_50
+    return recall_1,recall_10,recall_50,coverage_results
     
 
 def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_data,args,eval_batch=None):
@@ -414,6 +553,11 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
     correct=[]
     turn=0
     generated_DAs=[]
+
+    # Coverage accumulators
+    k_values = args.get('coverage_topk', [1, 10, 50])
+    cov_acc = init_coverage_accumulators(k_values)
+    dialog_rec_items = []  # accumulate recommended item ids within a dialog
 
     with torch.no_grad():
         for test_batch in tqdm(test_loader):
@@ -462,6 +606,14 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
                 score=all_scores[num]
                 score_ex=rec[num,:]
 
+                # --- Per-turn coverage from score_ex (explicit recommender) ---
+                score_ex_np = score_ex.cpu().numpy() if torch.is_tensor(score_ex) else np.array(score_ex)
+                cand_ids = shuffled_rec_cand[num]  # list of 5 movie ids
+                turn_vals = accumulate_turn_coverage(cov_acc, score_ex_np, cand_ids, k_values, args)
+                # Collect top items for dialog-level coverage
+                max_k = max(k_values)
+                ranked_idx = sorted(range(len(score_ex_np)), key=lambda x: -score_ex_np[x])
+                dialog_rec_items.extend([cand_ids[i] for i in ranked_idx[:max_k]])
 
                 wrong_count=0
                 wrong_count_ex=0
@@ -507,6 +659,16 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
                             accuracy_split[index]+=1
                     turn=0
                     correct=[]
+
+                    # Dialog-level coverage
+                    if len(dialog_rec_items) > 0:
+                        for k in k_values:
+                            topk_dialog = dialog_rec_items[:k] if len(dialog_rec_items) >= k else dialog_rec_items
+                            kg = compute_kg_coverage(topk_dialog, args['movie_kg_neighbors'], args['total_reachable_entities'])
+                            cat = compute_cat_coverage(topk_dialog, args['movie_kg_relation_types'], args['total_relation_types'])
+                            cov_acc[f'kg_cov_dialog@{k}'].append(kg)
+                            cov_acc[f'cat_cov_dialog@{k}'].append(cat)
+                        dialog_rec_items = []
                 else:
                     turn+=1
     
@@ -523,6 +685,8 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
     for i,item in enumerate(accuracy_split):
         accuracy_split[i]=item/tot_split[i]
 
+    coverage_results = finalize_coverage(cov_acc, k_values)
+
     intent_accuracy=intent_accuracy/tot_turns
     print("turn_1",turn_1)
     print("turn_3",turn_3)
@@ -532,8 +696,10 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
     print("turn_3_ex",turn_3_ex)
     print("chat_1_ex",chat_1_ex)
     print("chat_3_ex",chat_3_ex)
+    for key, val in sorted(coverage_results.items()):
+        print(f"{key}: {val:.4f}")
         
-    return intent_accuracy,turn_1,turn_3,chat_1,chat_3,turn_1_ex,turn_3_ex,chat_1_ex,chat_3_ex
+    return intent_accuracy,turn_1,turn_3,chat_1,chat_3,turn_1_ex,turn_3_ex,chat_1_ex,chat_3_ex,coverage_results
 
 
 def evaluate_gen_redial(test_loader:DataLoader, model:ProRec, graph_data, args, golden_intent=True):

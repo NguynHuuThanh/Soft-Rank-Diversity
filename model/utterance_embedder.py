@@ -52,6 +52,15 @@ class Utterance_Embedder(nn.Module):
 
 
     def prepare_data(self,dialog_history,device,raw_history=False):
+        def normalize_turn(turn):
+            if isinstance(turn, str):
+                return turn
+            if isinstance(turn, (list, tuple)):
+                return " ".join(str(tok) for tok in turn)
+            if turn is None:
+                return ""
+            return str(turn)
+
         pad_history=[]
         word_index=[]
         word_batch_index=[]
@@ -59,9 +68,10 @@ class Utterance_Embedder(nn.Module):
         for i in range(len(dialog_history)):
             turn_words=[]
             cur_history=""
-            turns=len(dialog_history[i])
+            normalized_history=[normalize_turn(turn) for turn in dialog_history[i]]
+            turns=len(normalized_history)
             if turns>self.num_turns:
-                padded=dialog_history[i][turns-self.num_turns:]
+                padded=normalized_history[turns-self.num_turns:]
                 pad_history=pad_history+padded
                 for sen in padded:
                     cur_history=cur_history+sen+" "
@@ -69,14 +79,14 @@ class Utterance_Embedder(nn.Module):
                 pad=[]
                 for j in range(self.num_turns-turns):
                     pad.append("")
-                padded=pad+dialog_history[i]
-                for sen in dialog_history[i]:
+                padded=pad+normalized_history
+                for sen in normalized_history:
                     cur_history=cur_history+sen+" "
 
                 pad_history=pad_history+padded
             else:
-                pad_history=pad_history+dialog_history[i]
-                for sen in dialog_history[i]:
+                pad_history=pad_history+normalized_history
+                for sen in normalized_history:
                     cur_history=cur_history+sen+" "
             
             token_history=word_tokenize(cur_history)
@@ -92,7 +102,12 @@ class Utterance_Embedder(nn.Module):
                 turn_words.append(self.key2index.get(word.lower(),0))
             all_words.append(turn_words)
 
-        tokenized_dialog=self.tokenizer.batch_encode_plus(pad_history,pad_to_max_length=True,return_tensors="pt",)#[turn1,turn2,turn3....]
+        tokenized_dialog=self.tokenizer(
+            pad_history,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        )#[turn1,turn2,turn3....]
         for key in tokenized_dialog.keys():
             tokenized_dialog[key]=tokenized_dialog[key].to(device=device)
         all_length=torch.sum(tokenized_dialog["attention_mask"],dim=-1).view(-1,self.num_turns).permute(1,0)

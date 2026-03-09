@@ -51,6 +51,37 @@ def preprocess():
 
     print(total_rel)
 
+    # --- Precompute KG coverage caches ---
+    # movie_kg_neighbors[movie_id] = set of 1-hop neighbor entity ids
+    # movie_kg_relation_types[movie_id] = set of directed relation-type ids
+    relations_names = ['time', 'director', 'starring', 'genre', 'subject', 'belong',
+                       'timeR', 'directorR', 'starringR', 'genreR', 'subjectR', 'belongR']
+    movie_kg_neighbors = {}
+    movie_kg_relation_types = {}
+    for item in relations:
+        src, dst, rel_name = int(item[0]), int(item[1]), item[2]
+        rel_id = relations_names.index(rel_name) if rel_name in relations_names else -1
+        # We care about edges originating from movie nodes
+        if src < movie_count:
+            if src not in movie_kg_neighbors:
+                movie_kg_neighbors[src] = set()
+                movie_kg_relation_types[src] = set()
+            movie_kg_neighbors[src].add(dst)
+            if rel_id >= 0:
+                movie_kg_relation_types[src].add(rel_id)
+        # Also reverse edges landing on movies (entity -> movie) give neighbor info for the entity source
+        # but for coverage we only look at outgoing edges from movie nodes
+    # Total reachable entities = union of all 1-hop neighbors of all movies
+    total_reachable = set()
+    for neighbors in movie_kg_neighbors.values():
+        total_reachable |= neighbors
+    args['movie_kg_neighbors'] = movie_kg_neighbors
+    args['movie_kg_relation_types'] = movie_kg_relation_types
+    args['total_reachable_entities'] = max(len(total_reachable), 1)
+    args['total_relation_types'] = len(relations_names)  # 12 directed types
+    print("Coverage caches: reachable entities =", args['total_reachable_entities'],
+          ", relation types =", args['total_relation_types'])
+
 
 
 

@@ -1,5 +1,11 @@
 import sys
+import os.path as osp
 from transformers import BertModel,BertTokenizer
+
+PROJECT_ROOT = osp.abspath(osp.join(osp.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from CR_walker import ProRec
 from evaluation import evaluate_rec_redial,evaluate_gen_redial
 from conf import add_generic_args,args
@@ -7,13 +13,11 @@ from entity_linker import match_nodes
 from data.utils import da_tree_serial,utter_lexical_redial,utter_lexical_gorecdial
 from copy import deepcopy
 
-sys.path.append("..")
 from data.utils import da_tree_serial
 from data.redial import ReDial
 import torch
 import argparse
 import torch.nn as nn
-import os.path as osp
 import json
 
 import torch.nn.functional as F
@@ -42,6 +46,11 @@ parser.add_argument("--lr",type=float,default=5e-4)
 parser.add_argument("--weight_decay",type=float,default=0.01)
 parser.add_argument("--eval_batch",type=int,default=5000)
 parser.add_argument("--word_net",action='store_true')
+parser.add_argument("--div_loss_weight",type=float,default=1.23,help="Weight for diversity loss (0 disables)")
+parser.add_argument("--div_temperature",type=float,default=0.1,help="Temperature for softmax in diversity loss")
+parser.add_argument("--coverage_topk",type=str,default="1,10,50",help="Comma-separated k values for coverage metrics")
+parser.add_argument("--log_interval",type=int,default=100,help="Print per-iteration loss every N iterations (0 = silent)")
+parser.add_argument("--early_stop_patience",type=int,default=5,help="Stop if recall@10 not improved for this many epochs")
 t_args = parser.parse_args()
 
 
@@ -66,11 +75,14 @@ train_loader=DataLoader(redial_train,batch_size=20,shuffle=True)
 test_loader=DataLoader(redial_test,batch_size=20,shuffle=False)
 
 add_generic_args()
+args['div_loss_weight']=t_args.div_loss_weight
+args['div_temperature']=t_args.div_temperature
+args['coverage_topk']=[int(x) for x in t_args.coverage_topk.split(',')]
 
 
 
 if t_args.option=="train":
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,atten_hidden=t_args.atten_hidden,word_net=t_args.word_net)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,atten_hidden=t_args.atten_hidden,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
     if t_args.restore_best:
         print("restoring from best checkpoint...")
         state_dict=torch.load(save_path)
@@ -95,6 +107,10 @@ if t_args.option=="train":
         best_recall_10=0
         best_recall_50=0
         stats_all={"recall_1":[],"recall_10":[],"recall_50":[]}
+        # Add coverage metric keys
+        for _k in args['coverage_topk']:
+            for _m in ['kg_cov_turn','cat_cov_turn','kg_cov_dialog','cat_cov_dialog']:
+                stats_all[f'{_m}@{_k}']=[]
 
     unfreeze_layers = ["utter_embedder.rnn","intent_selector","graph_embedder","graph_walker","Wa","Ww"] #"intent_selector"
 
@@ -113,9 +129,14 @@ if t_args.option=="train":
     batch=0
     num=0
     num_pretrain=0
-    
+
     pretrain_epoch=t_args.pretrain_epoch
     max_epoch=t_args.train_epoch
+
+    # Early stopping state
+    best_epoch_recall10 = -1.0
+    no_improve_epochs = 0
+    prev_epoch_avg_loss = None
 
 
     if t_args.pretrain:
@@ -131,6 +152,10 @@ if t_args.option=="train":
    
 
     for i in range(max_epoch):
+        prorec.train()
+        epoch_loss_sum = 0.0
+        epoch_steps = 0
+
         for batch in train_loader:
             optimizer.zero_grad()
             tokenized_dialog,all_length,maxlen,init_hidden,edge_type,edge_index,mention_index,mention_batch_index,sel_indices,sel_batch_indices,sel_group_indices,grp_batch_indices,last_indices,intent_indices,intent_label,label_1,label_2,score_masks,word_index,word_batch_index=prorec.prepare_data_redial(batch.dialog_history,batch.mention_history,batch.intent,batch.node_candidate1,batch.node_candidate2,graph_data.edge_type,graph_data.edge_index,batch.label_1,batch.label_2,batch.gold_pos,args['attribute_dict'],sample=True)
@@ -142,15 +167,24 @@ if t_args.option=="train":
             loss.backward()
             optimizer.step()
 
-            print("iter ",num,":",loss.item())
-            
+            loss_val = float(loss.item())
+            epoch_loss_sum += loss_val
+            epoch_steps += 1
+
+            # Per-iteration log (controlled by --log_interval; 0 = silent)
+            if t_args.log_interval > 0 and (num % t_args.log_interval) == 0:
+                print(f"[Train][Epoch {i+1}/{max_epoch}][Iter {num}] loss={loss_val:.6f}")
+
             if (num+1) % t_args.eval_batch == 0:
                 prorec.eval()
-                recall_1,recall_10,recall_50=evaluate_rec_redial(test_loader,prorec,graph_data,args)
+                recall_1,recall_10,recall_50,coverage_results=evaluate_rec_redial(test_loader,prorec,graph_data,args)
 
                 stats_all['recall_1'].append(recall_1)
                 stats_all['recall_10'].append(recall_10)
                 stats_all['recall_50'].append(recall_50)
+                for cov_key,cov_val in coverage_results.items():
+                    if cov_key in stats_all:
+                        stats_all[cov_key].append(cov_val)
 
                 if recall_1>best_recall_1:
                     best_recall_1=recall_1
@@ -170,18 +204,46 @@ if t_args.option=="train":
                 json.dump(stats_all,f)
                 f.close()
             num+=1
-    
+
+        # ── Epoch-end summary ──────────────────────────────────────────
+        epoch_avg_loss = epoch_loss_sum / max(epoch_steps, 1)
+        print(f"[Epoch End] {i+1}/{max_epoch}  avg_train_loss={epoch_avg_loss:.6f}")
+
+        # Underfit / stall heuristic
+        if prev_epoch_avg_loss is not None:
+            delta = prev_epoch_avg_loss - epoch_avg_loss
+            if delta < 0:
+                print("[Warn][Underfit/Stall] Train loss increased this epoch — possible instability.")
+            elif delta < 1e-4:
+                print("[Info][Slow] Train loss barely decreased — consider tuning lr/regularisation.")
+        prev_epoch_avg_loss = epoch_avg_loss
+
+        # ── Epoch-level eval for early stopping ───────────────────────
+        prorec.eval()
+        recall_1_ep, recall_10_ep, recall_50_ep, _ = evaluate_rec_redial(test_loader, prorec, graph_data, args)
+        print(f"[Epoch Eval] epoch={i+1}  recall@1={recall_1_ep:.6f}  recall@10={recall_10_ep:.6f}  recall@50={recall_50_ep:.6f}")
+
+        if recall_10_ep > best_epoch_recall10:
+            best_epoch_recall10 = recall_10_ep
+            no_improve_epochs = 0
+        else:
+            no_improve_epochs += 1
+            print(f"[EarlyStop] No epoch-level improvement: {no_improve_epochs}/{t_args.early_stop_patience}")
+            if no_improve_epochs >= t_args.early_stop_patience:
+                print(f"[EarlyStop] Stopping at epoch {i+1} — recall@10 did not improve for {t_args.early_stop_patience} consecutive epochs.")
+                break
+
 elif t_args.option=="test":
     print("testing model recommendation...")
     state_dict=torch.load(save_path,map_location=device_str)
 
     for key in state_dict.keys():
         print(key)
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)
-    evaluate_rec_redial(test_loader,prorec,graph_data,args)
+    recall_1,recall_10,recall_50,coverage_results=evaluate_rec_redial(test_loader,prorec,graph_data,args)
 
 elif t_args.option=="test_gen":
     print("testing model generation...")
@@ -189,7 +251,7 @@ elif t_args.option=="test_gen":
 
     for key in state_dict.keys():
         print(key)
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)

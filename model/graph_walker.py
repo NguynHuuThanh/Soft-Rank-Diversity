@@ -6,7 +6,9 @@ from conf import args,add_generic_args
 import random
 import os.path as osp
 import sys
-sys.path.append("..")
+PROJECT_ROOT = osp.abspath(osp.join(osp.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 from data.redial import ReDial
 from data.gorecdial import GoRecDial
 from torch_geometric.data import DataLoader

@@ -38,6 +38,9 @@ parser.add_argument("--lr",type=float,default=1e-3)
 parser.add_argument("--weight_decay",type=float,default=0.01)
 parser.add_argument("--eval_batch",type=int,default=500)
 parser.add_argument("--word_net",action='store_true')
+parser.add_argument("--div_loss_weight",type=float,default=0.67,help="Weight for diversity loss (0 disables)")
+parser.add_argument("--div_temperature",type=float,default=0.1,help="Temperature for softmax in diversity loss")
+parser.add_argument("--coverage_topk",type=str,default="1,10,50",help="Comma-separated k values for coverage metrics")
 
 t_args = parser.parse_args()
 
@@ -64,13 +67,16 @@ test_loader=DataLoader(gorecdial_test,batch_size=10,shuffle=False)
 
 
 add_generic_args(dataset='gorecdial')
+args['div_loss_weight']=t_args.div_loss_weight
+args['div_temperature']=t_args.div_temperature
+args['coverage_topk']=[int(x) for x in t_args.coverage_topk.split(',')]
 
 
 
 
 
 if option=="train":
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,dataset="gorecdial",word_net=t_args.word_net)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,dataset="gorecdial",word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
     if t_args.restore_best:
         print("restoring from best checkpoint...")
         state_dict=torch.load(save_path)
@@ -89,6 +95,10 @@ if option=="train":
         print("cur best turn 1:",best_turn_1)
     else:
         stats_all={"intent_accuracy":[],"turn_1":[],"turn_3":[],"chat_1":[],"chat_3":[],"turn_1_ex":[],"turn_3_ex":[],"chat_1_ex":[],"chat_3_ex":[]}
+        # Add coverage metric keys
+        for _k in args['coverage_topk']:
+            for _m in ['kg_cov_turn','cat_cov_turn','kg_cov_dialog','cat_cov_dialog']:
+                stats_all[f'{_m}@{_k}']=[]        
         best_chat_1=0
         best_turn_1=0
 
@@ -147,7 +157,7 @@ if option=="train":
             
             if (num+1) % t_args.eval_batch ==0:
                 prorec.eval()
-                intent_accuracy,turn_1,turn_3,chat_1,chat_3,turn_1_ex,turn_3_ex,chat_1_ex,chat_3_ex=evaluate_rec_gorecdial(test_loader,prorec,graph_data,bow_data,args)
+                intent_accuracy,turn_1,turn_3,chat_1,chat_3,turn_1_ex,turn_3_ex,chat_1_ex,chat_3_ex,coverage_results=evaluate_rec_gorecdial(test_loader,prorec,graph_data,bow_data,args)
                 stats_all['intent_accuracy'].append(intent_accuracy)
                 stats_all['turn_1'].append(turn_1)
                 stats_all['turn_3'].append(turn_3)
@@ -157,6 +167,9 @@ if option=="train":
                 stats_all['turn_3_ex'].append(turn_3_ex)
                 stats_all['chat_1_ex'].append(chat_1_ex)
                 stats_all['chat_3_ex'].append(chat_3_ex)
+                for cov_key,cov_val in coverage_results.items():
+                    if cov_key in stats_all:
+                        stats_all[cov_key].append(cov_val)
 
 
                 if turn_1_ex>best_turn_1 or chat_1_ex>best_chat_1:
@@ -182,11 +195,11 @@ elif option=="test":
 
     for key in state_dict.keys():
         print(key)
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,dataset="gorecdial")
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,dataset="gorecdial",div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)
-    evaluate_rec_gorecdial(test_loader,prorec,graph_data,bow_data,args)
+    intent_accuracy,turn_1,turn_3,chat_1,chat_3,turn_1_ex,turn_3_ex,chat_1_ex,chat_3_ex,coverage_results=evaluate_rec_gorecdial(test_loader,prorec,graph_data,bow_data,args)
 
 
 elif option=="test_gen":
@@ -195,7 +208,7 @@ elif option=="test_gen":
 
     for key in state_dict.keys():
         print(key)
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,dataset="gorecdial")
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,dataset="gorecdial",div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)

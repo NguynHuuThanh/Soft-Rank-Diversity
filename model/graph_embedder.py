@@ -30,6 +30,8 @@ class Graph_Embedder(nn.Module):
 
 
     def forward(self,edge_type,edge_index):
+        edge_index = edge_index.long()
+        edge_type = edge_type.long()
         graph_features=torch.relu(self.gcn1(self.init_features,edge_index,edge_type))
 
 
