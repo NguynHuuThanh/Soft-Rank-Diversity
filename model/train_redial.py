@@ -19,6 +19,7 @@ import torch
 import argparse
 import torch.nn as nn
 import json
+import time
 
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -47,6 +48,7 @@ parser.add_argument("--weight_decay",type=float,default=0.01)
 parser.add_argument("--eval_batch",type=int,default=5000)
 parser.add_argument("--word_net",action='store_true')
 parser.add_argument("--div_loss_weight",type=float,default=1.23,help="Weight for diversity loss (0 disables)")
+parser.add_argument("--dpp_loss_weight",type=float,default=0.0,help="Weight for DPP loss (0 disables)")
 parser.add_argument("--div_temperature",type=float,default=0.1,help="Temperature for softmax in diversity loss")
 parser.add_argument("--coverage_topk",type=str,default="1,10,50",help="Comma-separated k values for coverage metrics")
 parser.add_argument("--log_interval",type=int,default=100,help="Print per-iteration loss every N iterations (0 = silent)")
@@ -76,13 +78,14 @@ test_loader=DataLoader(redial_test,batch_size=20,shuffle=False)
 
 add_generic_args()
 args['div_loss_weight']=t_args.div_loss_weight
+args['dpp_loss_weight']=t_args.dpp_loss_weight
 args['div_temperature']=t_args.div_temperature
 args['coverage_topk']=[int(x) for x in t_args.coverage_topk.split(',')]
 
 
 
 if t_args.option=="train":
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,atten_hidden=t_args.atten_hidden,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,atten_hidden=t_args.atten_hidden,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature,dpp_loss_weight=t_args.dpp_loss_weight)
     if t_args.restore_best:
         print("restoring from best checkpoint...")
         state_dict=torch.load(save_path)
@@ -152,6 +155,7 @@ if t_args.option=="train":
    
 
     for i in range(max_epoch):
+        epoch_start_time = time.time()
         prorec.train()
         epoch_loss_sum = 0.0
         epoch_steps = 0
@@ -206,8 +210,9 @@ if t_args.option=="train":
             num+=1
 
         # ── Epoch-end summary ──────────────────────────────────────────
+        epoch_train_seconds = time.time() - epoch_start_time
         epoch_avg_loss = epoch_loss_sum / max(epoch_steps, 1)
-        print(f"[Epoch End] {i+1}/{max_epoch}  avg_train_loss={epoch_avg_loss:.6f}")
+        print(f"[Epoch End] {i+1}/{max_epoch}  avg_train_loss={epoch_avg_loss:.6f}  epoch_train_time={epoch_train_seconds:.2f}s")
 
         # Underfit / stall heuristic
         if prev_epoch_avg_loss is not None:
@@ -239,7 +244,7 @@ elif t_args.option=="test":
 
     for key in state_dict.keys():
         print(key)
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature,dpp_loss_weight=t_args.dpp_loss_weight)
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)
@@ -251,7 +256,7 @@ elif t_args.option=="test_gen":
 
     for key in state_dict.keys():
         print(key)
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature,dpp_loss_weight=t_args.dpp_loss_weight)
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)

@@ -14,7 +14,7 @@ from explicit_recommender import Explicit_Recommender
 
 class ProRec(nn.Module):
     #beta=tanh(QW+KU)*V
-    def __init__(self,device_str='cuda:1',rnn_type="RNN_TANH",use_bert=True,utter_embed_size=64,dropout=0.5,num_turns=10,num_relations=12,num_bases=15,graph_embed_size=64,atten_hidden=20,negative_sample_ratio=5,dataset="redial",word_net=False,div_loss_weight=0.0,div_temperature=0.1):
+    def __init__(self,device_str='cuda:1',rnn_type="RNN_TANH",use_bert=True,utter_embed_size=64,dropout=0.5,num_turns=10,num_relations=12,num_bases=15,graph_embed_size=64,atten_hidden=20,negative_sample_ratio=5,dataset="redial",word_net=False,div_loss_weight=0.0,div_temperature=0.1,dpp_loss_weight=0.0):
         super(ProRec,self).__init__()
         self.dataset=dataset
         if dataset=="redial":
@@ -42,6 +42,8 @@ class ProRec(nn.Module):
         # Diversity loss hyperparameters
         self.div_loss_weight=div_loss_weight
         self.div_temperature=div_temperature
+        # DPP loss hyperparameter
+        self.dpp_loss_weight=dpp_loss_weight
         
 
         self.device=torch.device(device_str)
@@ -98,7 +100,54 @@ class ProRec(nn.Module):
         return weighted_sim.mean()
 
 
-    def forward_pretrain(self,tokenized_dialog,all_length,maxlen,init_hidden,edge_type,edge_index,alignment_index,alignment_batch_index,alignment_label,intent_label,alignment_index_word=None,alignment_batch_index_word=None,alignment_label_word=None):
+    def compute_dpp_loss(self, scores, item_embeddings, mask=None, epsilon=1e-5):
+        """
+        DPP (Determinantal Point Process) loss: encourages diversity via determinant.
+        
+        Uses a soft-selection approach with temperature-scaled softmax weighting,
+        then approximates -log(det(L_weighted)) using spectral decomposition or trace.
+        
+        Args:
+            scores:          [B, M]  raw recommendation logits/scores
+            item_embeddings: [M, d]  node embeddings for the M candidate items
+            mask:            [B, M]  optional binary mask (1 = valid candidate)
+            epsilon:         float   numerical stability constant
+        Returns:
+            scalar DPP loss (to be *minimized*)
+        """
+        tau = self.div_temperature
+        batch_size, _ = scores.shape
+
+        # 1) Soft selection via temperature-scaled softmax
+        scaled = scores / tau
+        if mask is not None:
+            scaled = scaled + (1.0 - mask) * (-1e9)
+        selection_weights = F.softmax(scaled, dim=-1)  # [B, M]
+
+        # 2) Memory-safe DPP objective using low-rank form:
+        #    Lw = diag(sqrt(w)) V V^T diag(sqrt(w)) = A A^T, where A = diag(sqrt(w)) V
+        #    log det(I + Lw) = log det(I + A^T A), and A^T A is only [d, d].
+        normed = F.normalize(item_embeddings, p=2, dim=-1)  # [M, d]
+        dim = normed.size(1)
+        eye = torch.eye(dim, device=scores.device, dtype=normed.dtype)
+
+        dpp_losses = []
+        for b in range(batch_size):
+            w = selection_weights[b].clamp_min(0.0)  # [M]
+            weighted = normed * torch.sqrt(w + epsilon).unsqueeze(1)  # [M, d]
+            gram = torch.mm(weighted.t(), weighted)  # [d, d]
+
+            try:
+                sign, logabsdet = torch.linalg.slogdet(eye + gram)
+                if sign <= 0:
+                    raise RuntimeError("non-positive determinant sign")
+                dpp_losses.append(-logabsdet)
+            except:
+                trace = torch.trace(gram)
+                dpp_losses.append(-torch.log1p(trace + epsilon))
+
+        return torch.mean(torch.stack(dpp_losses))
+
         
         utter_embed=self.utter_embedder.forward(tokenized_dialog,all_length,maxlen,init_hidden)
         #last_utter=utter_embed[:,-1,:]
@@ -405,6 +454,38 @@ class ProRec(nn.Module):
                 rec_mask   = dense_mask[has_rec]     # [B', mc]
                 div_loss = self.compute_diversity_loss(rec_scores, graph_embed, mask=rec_mask)
                 tot_loss = tot_loss + self.div_loss_weight * div_loss
+
+        # --- DPP loss for ReDial (complementary to diversity loss) ---
+        if self.dpp_loss_weight > 0:
+            l2_scores = paths[1]                # flat [N2]
+            l2_sel = sel_indices[1]             # flat [N2] node ids
+            l2_bat = sel_batch_indices[1]       # flat [N2] batch idx
+            l2_mask = score_masks[1]            # flat [N2]
+
+            valid = l2_mask > 0
+            if valid.any():
+                valid_scores = l2_scores[valid]
+                valid_sel = l2_sel[valid]
+                valid_bat = l2_bat[valid]
+
+                per_sample_losses = []
+                unique_batches = torch.unique(valid_bat)
+                for b in unique_batches:
+                    idx = (valid_bat == b)
+                    b_scores = valid_scores[idx]                    # [Mb]
+                    b_sel = valid_sel[idx]                          # [Mb]
+                    b_embed = graph_embed.index_select(0, b_sel)    # [Mb, d]
+
+                    sample_loss = self.compute_dpp_loss(
+                        b_scores.unsqueeze(0),
+                        b_embed,
+                        mask=None
+                    )
+                    per_sample_losses.append(sample_loss)
+
+                if len(per_sample_losses) > 0:
+                    dpp_loss = torch.mean(torch.stack(per_sample_losses))
+                    tot_loss = tot_loss + self.dpp_loss_weight * dpp_loss
 
         return intent,paths,tot_loss
 

@@ -36,7 +36,7 @@
 
 Traditional conversational recommender systems (CRS) are trained with **accuracy-only objectives** — typically cross-entropy loss that maximizes the probability of the ground-truth item. While this successfully teaches the model to predict relevant items, it often leads to a well-known problem: **homogeneous recommendation lists**.
 
-Consider a user who mentions liking *The Dark Knight*. An accuracy-optimized system might recommend *Batman Begins*, *The Dark Knight Rises*, *Batman v Superman*, *Justice League*, and *Joker* — all highly relevant, but all extremely similar (same franchise, same genre, same actors). The user gets no opportunity to discover that they might also enjoy *Inception* (same director, different genre) or *V for Vendetta* (similar theme, different universe).
+Consider a user who mentions liking _The Dark Knight_. An accuracy-optimized system might recommend _Batman Begins_, _The Dark Knight Rises_, _Batman v Superman_, _Justice League_, and _Joker_ — all highly relevant, but all extremely similar (same franchise, same genre, same actors). The user gets no opportunity to discover that they might also enjoy _Inception_ (same director, different genre) or _V for Vendetta_ (similar theme, different universe).
 
 **The diversity-accuracy trade-off** is a fundamental challenge in recommender systems:
 
@@ -54,18 +54,18 @@ In knowledge-graph-enhanced recommender systems like KECRS, each item (movie) is
 
 ## 2. Background & Notation
 
-| Symbol | Description | Shape / Type |
-|--------|-------------|--------------|
-| $M$ | Total number of candidate movies | Scalar (e.g., 6730) |
-| $d$ | Embedding dimension | Scalar (e.g., 128) |
-| $B$ | Batch size (number of users per batch) | Scalar |
-| $\mathbf{s}_i \in \mathbb{R}^M$ | Raw recommendation scores for user $i$ | Vector |
-| $\mathbf{E} \in \mathbb{R}^{M \times d}$ | Item embedding matrix (output of RGCN) | Matrix |
-| $\mathbf{e}_j \in \mathbb{R}^d$ | Embedding vector of item $j$ (row $j$ of $\mathbf{E}$) | Vector |
-| $\tau > 0$ | Temperature parameter for softmax | Scalar (e.g., 0.1) |
-| $\lambda \geq 0$ | Diversity loss weight | Scalar |
-| $k$ | Number of top items for evaluation metrics | Scalar (e.g., 10) |
-| $\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathcal{R})$ | Knowledge graph with entities, edges, relation types | Graph |
+| Symbol                                                  | Description                                            | Shape / Type        |
+| ------------------------------------------------------- | ------------------------------------------------------ | ------------------- |
+| $M$                                                     | Total number of candidate movies                       | Scalar (e.g., 6730) |
+| $d$                                                     | Embedding dimension                                    | Scalar (e.g., 128)  |
+| $B$                                                     | Batch size (number of users per batch)                 | Scalar              |
+| $\mathbf{s}_i \in \mathbb{R}^M$                         | Raw recommendation scores for user $i$                 | Vector              |
+| $\mathbf{E} \in \mathbb{R}^{M \times d}$                | Item embedding matrix (output of RGCN)                 | Matrix              |
+| $\mathbf{e}_j \in \mathbb{R}^d$                         | Embedding vector of item $j$ (row $j$ of $\mathbf{E}$) | Vector              |
+| $\tau > 0$                                              | Temperature parameter for softmax                      | Scalar (e.g., 0.1)  |
+| $\lambda \geq 0$                                        | Diversity loss weight                                  | Scalar              |
+| $k$                                                     | Number of top items for evaluation metrics             | Scalar (e.g., 10)   |
+| $\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathcal{R})$ | Knowledge graph with entities, edges, relation types   | Graph               |
 
 ### The KECRS Recommendation Pipeline (Simplified)
 
@@ -122,12 +122,12 @@ where $\tau > 0$ is the **temperature** hyperparameter.
 
 **Effect of temperature:**
 
-| Temperature $\tau$ | Behavior | Analogy |
-|---------------------|----------|---------|
-| $\tau \to 0^+$ | $\mathbf{w}_i$ approaches a one-hot vector on the highest-scored item | Hard argmax |
-| $\tau$ small (e.g., 0.1) | Weight concentrates sharply on top few items | Approximate top-k |
-| $\tau = 1$ | Standard softmax | Balanced selection |
-| $\tau \to \infty$ | Uniform distribution | Random selection |
+| Temperature $\tau$       | Behavior                                                              | Analogy            |
+| ------------------------ | --------------------------------------------------------------------- | ------------------ |
+| $\tau \to 0^+$           | $\mathbf{w}_i$ approaches a one-hot vector on the highest-scored item | Hard argmax        |
+| $\tau$ small (e.g., 0.1) | Weight concentrates sharply on top few items                          | Approximate top-k  |
+| $\tau = 1$               | Standard softmax                                                      | Balanced selection |
+| $\tau \to \infty$        | Uniform distribution                                                  | Random selection   |
 
 We use $\tau = 0.1$ (default) so that the soft selection weights closely approximate the hard top-k selection, while remaining fully differentiable.
 
@@ -194,6 +194,7 @@ $$
 $$
 
 where:
+
 - $\mathbf{s}_i \in \mathbb{R}^M$ are the raw recommendation scores for user $i$
 - $\hat{\mathbf{E}} \in \mathbb{R}^{M \times d}$ is the row-wise $\ell_2$-normalized item embedding matrix
 - $\tau > 0$ is temperature
@@ -215,12 +216,12 @@ A natural question: why not simply take the top-k items by score, compute their 
 
 **The `argmax`/`argsort` operation is not differentiable.** When you select the top-k items by index, you create a discrete, combinatorial operation. The gradient of "which items are in the top-k" with respect to the scores is zero almost everywhere (the selection doesn't change for small perturbations) and undefined at the boundary (when two items have exactly the same score).
 
-| Approach | Differentiable? | Approximation Quality | Gradient Signal |
-|----------|----------------|----------------------|-----------------|
-| Hard top-k via `argsort` | ❌ No | Exact | None (zero gradient) |
-| Gumbel-Softmax | ✅ Yes | Moderate | Noisy, high variance |
-| Our soft top-k (temp. softmax) | ✅ Yes | Excellent at low $\tau$ | Clean, low variance |
-| Straight-through estimator | ⚠️ Biased | Exact in forward | Biased gradient |
+| Approach                       | Differentiable? | Approximation Quality   | Gradient Signal      |
+| ------------------------------ | --------------- | ----------------------- | -------------------- |
+| Hard top-k via `argsort`       | ❌ No           | Exact                   | None (zero gradient) |
+| Gumbel-Softmax                 | ✅ Yes          | Moderate                | Noisy, high variance |
+| Our soft top-k (temp. softmax) | ✅ Yes          | Excellent at low $\tau$ | Clean, low variance  |
+| Straight-through estimator     | ⚠️ Biased       | Exact in forward        | Biased gradient      |
 
 Our temperature-scaled softmax approach provides an excellent approximation to hard top-k selection while maintaining clean, well-defined gradients throughout the computation graph.
 
@@ -238,18 +239,19 @@ The vast majority of weight is on the top 2-3 items, effectively making this a "
 
 **Determinantal Point Processes (DPP)** are a popular framework for diverse subset selection. It is important to clarify how our approach differs:
 
-| Aspect | DPP | Our Soft Top-K Loss |
-|--------|-----|---------------------|
-| **Objective** | Maximize $\det(\mathbf{L}_S)$ for selected subset $S$ | Minimize $\mathbf{w}^\top \mathbf{S} \mathbf{w}$ |
-| **Selection mechanism** | Sampling/MAP inference (combinatorial) | Differentiable softmax weighting |
-| **Training** | Typically used at inference time | End-to-end differentiable training |
-| **Complexity** | $O(M^3)$ for exact MAP, or $O(k^2 M)$ for greedy | $O(M^2 d)$ for similarity matrix |
-| **Gradient** | Requires specialized gradient estimators | Standard backpropagation |
-| **Relevance-diversity** | Encoded in kernel $L = \text{diag}(q) \cdot S \cdot \text{diag}(q)$ | Balanced via $\lambda$ weight |
+| Aspect                  | DPP                                                                 | Our Soft Top-K Loss                              |
+| ----------------------- | ------------------------------------------------------------------- | ------------------------------------------------ |
+| **Objective**           | Maximize $\det(\mathbf{L}_S)$ for selected subset $S$               | Minimize $\mathbf{w}^\top \mathbf{S} \mathbf{w}$ |
+| **Selection mechanism** | Sampling/MAP inference (combinatorial)                              | Differentiable softmax weighting                 |
+| **Training**            | Typically used at inference time                                    | End-to-end differentiable training               |
+| **Complexity**          | $O(M^3)$ for exact MAP, or $O(k^2 M)$ for greedy                    | $O(M^2 d)$ for similarity matrix                 |
+| **Gradient**            | Requires specialized gradient estimators                            | Standard backpropagation                         |
+| **Relevance-diversity** | Encoded in kernel $L = \text{diag}(q) \cdot S \cdot \text{diag}(q)$ | Balanced via $\lambda$ weight                    |
 
 **Key difference**: DPP maximizes the determinant of a kernel matrix for a discrete subset, which captures **repulsion** between selected items. Our loss directly penalizes weighted pairwise similarity in a fully differentiable manner, allowing standard gradient descent training.
 
 Both approaches aim to increase diversity, but our method is:
+
 - **Simpler** to implement (no sampling, no specialized inference)
 - **Fully differentiable** (no gradient estimation needed)
 - **End-to-end trainable** (modifies the learned representations, not just the post-hoc re-ranking)
@@ -276,15 +278,15 @@ $$
 
 where:
 
-| Step | Operation | Function Class |
-|------|-----------|---------------|
-| $f_1$: RGCN forward | $\theta \mapsto \mathbf{E}$ | Composition of linear transforms + ReLU → $C^\infty$ in practice |
-| $f_2$: $\ell_2$-normalization | $\mathbf{e}_j \mapsto \mathbf{e}_j / \|\mathbf{e}_j\|_2$ | $C^\infty$ for $\|\mathbf{e}_j\| \neq 0$ |
-| $f_3$: Matrix multiplication | $\hat{\mathbf{E}} \mapsto \hat{\mathbf{E}}\hat{\mathbf{E}}^\top$ | $C^\infty$ (polynomial) |
-| $g_1$: Score computation | $\theta \mapsto \mathbf{s}_i$ | $C^\infty$ (linear) |
-| $g_2$: Temperature softmax | $\mathbf{s}_i \mapsto \text{softmax}(\mathbf{s}_i / \tau)$ | $C^\infty$ (exp and division by positive quantity) |
-| $f_5$: Quadratic form | $(\mathbf{w}_i, \mathbf{S}) \mapsto \mathbf{w}_i^\top \mathbf{S} \mathbf{w}_i$ | $C^\infty$ (polynomial) |
-| Batch mean | $\frac{1}{B}\sum_i$ | $C^\infty$ (linear) |
+| Step                          | Operation                                                                      | Function Class                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| $f_1$: RGCN forward           | $\theta \mapsto \mathbf{E}$                                                    | Composition of linear transforms + ReLU → $C^\infty$ in practice |
+| $f_2$: $\ell_2$-normalization | $\mathbf{e}_j \mapsto \mathbf{e}_j / \|\mathbf{e}_j\|_2$                       | $C^\infty$ for $\|\mathbf{e}_j\| \neq 0$                         |
+| $f_3$: Matrix multiplication  | $\hat{\mathbf{E}} \mapsto \hat{\mathbf{E}}\hat{\mathbf{E}}^\top$               | $C^\infty$ (polynomial)                                          |
+| $g_1$: Score computation      | $\theta \mapsto \mathbf{s}_i$                                                  | $C^\infty$ (linear)                                              |
+| $g_2$: Temperature softmax    | $\mathbf{s}_i \mapsto \text{softmax}(\mathbf{s}_i / \tau)$                     | $C^\infty$ (exp and division by positive quantity)               |
+| $f_5$: Quadratic form         | $(\mathbf{w}_i, \mathbf{S}) \mapsto \mathbf{w}_i^\top \mathbf{S} \mathbf{w}_i$ | $C^\infty$ (polynomial)                                          |
+| Batch mean                    | $\frac{1}{B}\sum_i$                                                            | $C^\infty$ (linear)                                              |
 
 **By the chain rule**, a composition of $C^\infty$ functions is $C^\infty$. Since every step in the computation is $C^\infty$ (given the mild assumption that $\|\mathbf{e}_j\| \neq 0$, which holds in practice since RGCN weights are randomly initialized and continuously updated), the entire loss $\mathcal{L}_{\text{div}}$ is **infinitely differentiable** with respect to all model parameters $\theta$.
 
@@ -347,6 +349,7 @@ $$
 $$
 
 **Interpretation**: The gradient for item $k$ is proportional to:
+
 - $w_{i,k}$: Items already receiving high weight get larger gradients (the model focuses on adjusting the scores of items it's already likely to recommend)
 - $(\mathbf{S}\mathbf{w}_i)_k - \mathbf{w}_i^\top \mathbf{S} \mathbf{w}_i$: The difference between item $k$'s weighted similarity to the soft top-k and the overall expected similarity. If item $k$ is **more similar** to the current soft selection than average, the gradient is **positive**, pushing its score **down** (since we minimize the loss). If item $k$ is **less similar**, the gradient is negative, allowing its score to increase.
 
@@ -399,7 +402,7 @@ $$
 \mathcal{L}_{\text{CE}} = -\frac{1}{B}\sum_{i=1}^{B} \log \frac{\exp(s_{i, y_i})}{\sum_{j=1}^{M} \exp(s_{i,j})}
 $$
 
-  Here $y_i$ is the index of the ground-truth item for user $i$.
+Here $y_i$ is the index of the ground-truth item for user $i$.
 
 - $\mathcal{L}_{\text{div}}$ is the diversity loss defined in Section 3.
 
@@ -471,6 +474,7 @@ The training process with diversity loss follows these steps for each batch:
 8. **Optimizer step**: Update parameters via Adam optimizer.
 
 **Key insight about gradient flow**: The diversity loss $\mathcal{L}_{\text{div}}$ gradient flows back through:
+
 - The **scores** $\mathbf{s}_i$ → adjusting how user embeddings map to item scores
 - The **item embeddings** $\mathbf{E}$ → adjusting the RGCN to produce more diverse representations
 - The **attention layer** → adjusting how user preferences are aggregated
@@ -493,12 +497,12 @@ $$
 
 where $r_1, r_2, \ldots, r_k$ are the top-k recommended item indices, and $\cos(\cdot, \cdot)$ denotes cosine similarity.
 
-| ILD Value | Interpretation |
-|-----------|---------------|
-| 0 | All top-k items have identical embeddings |
-| 0.5 | Moderate diversity |
-| 1.0 | All top-k items are maximally dissimilar (orthogonal embeddings) |
-| > 1.0 | Items are anti-correlated (possible but rare with KG embeddings) |
+| ILD Value | Interpretation                                                   |
+| --------- | ---------------------------------------------------------------- |
+| 0         | All top-k items have identical embeddings                        |
+| 0.5       | Moderate diversity                                               |
+| 1.0       | All top-k items are maximally dissimilar (orthogonal embeddings) |
+| > 1.0     | Items are anti-correlated (possible but rare with KG embeddings) |
 
 **ILD directly measures the geometric spread of recommended items in embedding space.** It is the evaluation-time analog of the diversity loss.
 
@@ -511,6 +515,7 @@ $$
 $$
 
 where:
+
 - $\mathcal{N}(r_j) = \{v : (r_j, \text{rel}, v) \in \mathcal{E}\}$ is the set of 1-hop neighbors of item $r_j$ in the KG.
 - $\mathcal{V}_{\text{reachable}} = \bigcup_{m \in \text{all movies}} \mathcal{N}(m)$ is the set of all entities reachable from any movie.
 
@@ -530,11 +535,11 @@ where $|\mathcal{R}|$ is the total number of distinct relation types in the KG.
 
 ### Metric Relationships
 
-| Metric | What it Measures | Granularity | Sensitive to |
-|--------|-----------------|------------|--------------|
-| ILD@k | Embedding-space diversity | Fine-grained | Learned representation quality |
-| KG_Coverage@k | Entity-level KG diversity | Entity-level | KG connectivity, item distinctness |
-| Cat_Coverage@k | Relation-type diversity | Category-level | KG schema breadth coverage |
+| Metric         | What it Measures          | Granularity    | Sensitive to                       |
+| -------------- | ------------------------- | -------------- | ---------------------------------- |
+| ILD@k          | Embedding-space diversity | Fine-grained   | Learned representation quality     |
+| KG_Coverage@k  | Entity-level KG diversity | Entity-level   | KG connectivity, item distinctness |
+| Cat_Coverage@k | Relation-type diversity   | Category-level | KG schema breadth coverage         |
 
 These metrics are **complementary**: ILD captures smooth embedding distances, KG Coverage captures discrete entity spread, and Category Coverage captures structural variety.
 
@@ -542,26 +547,29 @@ These metrics are **complementary**: ILD captures smooth embedding distances, KG
 
 ## 9. Hyperparameters
 
-| Parameter | Flag | Default | Range | Effect |
-|-----------|------|---------|-------|--------|
-| Diversity weight $\lambda$ | `--diversity-weight` | 0.0 | $[0, 1]$ | Strength of diversity regularization. 0 = disabled (baseline). Higher values push stronger diversity at potential accuracy cost. |
-| Temperature $\tau$ | `--diversity-temperature` | 0.1 | $(0, \infty)$ | Controls softmax sharpness. Lower = closer to hard top-k. Higher = smoother, more uniform weights. |
-| Top-k $k$ | `--diversity-topk` | 10 | $\{1, 2, \ldots\}$ | Number of top items for evaluation metrics (ILD, coverage). Does NOT affect the loss (loss uses all items weighted by softmax). |
+| Parameter                  | Flag                      | Default | Range              | Effect                                                                                                                           |
+| -------------------------- | ------------------------- | ------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Diversity weight $\lambda$ | `--diversity-weight`      | 0.0     | $[0, 1]$           | Strength of diversity regularization. 0 = disabled (baseline). Higher values push stronger diversity at potential accuracy cost. |
+| Temperature $\tau$         | `--diversity-temperature` | 0.1     | $(0, \infty)$      | Controls softmax sharpness. Lower = closer to hard top-k. Higher = smoother, more uniform weights.                               |
+| Top-k $k$                  | `--diversity-topk`        | 10      | $\{1, 2, \ldots\}$ | Number of top items for evaluation metrics (ILD, coverage). Does NOT affect the loss (loss uses all items weighted by softmax).  |
 
 ### Tuning Guidelines
 
 **Diversity weight $\lambda$**:
+
 - Start with $\lambda = 0$ (baseline) to establish accuracy benchmarks.
 - Gradually increase: try $\lambda \in \{0.001, 0.01, 0.05, 0.1, 0.5\}$.
 - Monitor recall@50 (accuracy) and ILD@10 (diversity) — look for the "knee" of the Pareto curve where diversity improves significantly without large accuracy drops.
 - Values above 1.0 are typically too aggressive and will hurt accuracy.
 
 **Temperature $\tau$**:
+
 - $\tau = 0.1$ works well in most settings.
 - If the model has very high scores (e.g., logits > 50), you may need higher $\tau$ to prevent numerical overflow in $\exp(s/\tau)$.
 - Lower $\tau$ focuses the diversity penalty on fewer top items; higher $\tau$ spreads it across more items.
 
 **Top-k $k$**:
+
 - $k = 10$ is standard for diversity evaluation in recommendation systems.
 - Matches typical "recommendation page" lengths in real applications.
 - Can also evaluate at $k = 5, 20, 50$ for different granularities.
@@ -665,17 +673,17 @@ cat_cov = len(covered_relations) / self.model.total_relation_types
 
 ## 11. Summary
 
-| Aspect | Details |
-|--------|---------|
-| **What** | A differentiable diversity loss based on soft top-k item selection via temperature-scaled softmax |
-| **Formula** | $\mathcal{L}\_{\text{div}} = \frac{1}{B} \sum\_{i=1}^{B} \mathbf{w}\_i^\top \mathbf{S} \mathbf{w}\_i$ where $\mathbf{w}\_i = \text{softmax}(\mathbf{s}\_i / \tau)$ and $\mathbf{S} = \hat{\mathbf{E}}\hat{\mathbf{E}}^\top$ |
-| **Combined loss** | $\mathcal{L}\_{\text{total}} = \mathcal{L}\_{\text{CE}} + \lambda \cdot \mathcal{L}\_{\text{div}}$ |
-| **Why it works** | Penalizes high pairwise similarity among top-scored items, pushing the model to recommend diverse items |
-| **Differentiability** | $C^\infty$ — proven by composition of smooth functions (softmax, normalization, quadratic form) |
-| **Gradient** | $\frac{\partial \ell}{\partial s\_k} = \frac{2}{\tau} w\_k [(\mathbf{S}\mathbf{w})\_k - \mathbf{w}^\top\mathbf{S}\mathbf{w}]$ — reduces scores of redundant items, increases scores of diverse items |
-| **Evaluation** | ILD@k (embedding distance), KG Coverage@k (entity spread), Category Coverage@k (relation-type breadth) |
-| **Key hyperparameters** | $\lambda$ (loss weight), $\tau$ (temperature), $k$ (evaluation top-k) |
+| Aspect                  | Details                                                                                                                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What**                | A differentiable diversity loss based on soft top-k item selection via temperature-scaled softmax                                                                                                                           |
+| **Formula**             | $\mathcal{L}\_{\text{div}} = \frac{1}{B} \sum\_{i=1}^{B} \mathbf{w}\_i^\top \mathbf{S} \mathbf{w}\_i$ where $\mathbf{w}\_i = \text{softmax}(\mathbf{s}\_i / \tau)$ and $\mathbf{S} = \hat{\mathbf{E}}\hat{\mathbf{E}}^\top$ |
+| **Combined loss**       | $\mathcal{L}\_{\text{total}} = \mathcal{L}\_{\text{CE}} + \lambda \cdot \mathcal{L}\_{\text{div}}$                                                                                                                          |
+| **Why it works**        | Penalizes high pairwise similarity among top-scored items, pushing the model to recommend diverse items                                                                                                                     |
+| **Differentiability**   | $C^\infty$ — proven by composition of smooth functions (softmax, normalization, quadratic form)                                                                                                                             |
+| **Gradient**            | $\frac{\partial \ell}{\partial s\_k} = \frac{2}{\tau} w\_k [(\mathbf{S}\mathbf{w})\_k - \mathbf{w}^\top\mathbf{S}\mathbf{w}]$ — reduces scores of redundant items, increases scores of diverse items                        |
+| **Evaluation**          | ILD@k (embedding distance), KG Coverage@k (entity spread), Category Coverage@k (relation-type breadth)                                                                                                                      |
+| **Key hyperparameters** | $\lambda$ (loss weight), $\tau$ (temperature), $k$ (evaluation top-k)                                                                                                                                                       |
 
 ---
 
-*This document describes the diversity loss function implemented in the KECRS system on the `kecrs-loss-diverse` branch.*
+_This document describes the diversity loss function implemented in the KECRS system on the `kecrs-loss-diverse` branch._

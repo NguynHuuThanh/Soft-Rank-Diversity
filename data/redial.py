@@ -30,6 +30,25 @@ class ReDial(InMemoryDataset):
         else:
             self.data, self.slices = _load_processed_data(self.processed_paths[0])
 
+        self._ensure_num_nodes_attr()
+
+    def _ensure_num_nodes_attr(self):
+        if self.flag == "graph":
+            return
+        if hasattr(self.data, 'num_nodes'):
+            return
+        if not hasattr(self, 'slices') or self.slices is None:
+            return
+        if 'my_id' not in self.slices:
+            return
+
+        num_examples = int(self.slices['my_id'].numel() - 1)
+        if num_examples <= 0:
+            return
+
+        self.data.num_nodes = torch.ones(num_examples, dtype=torch.long)
+        self.slices['num_nodes'] = torch.arange(num_examples + 1, dtype=torch.long)
+
     @property
     def raw_file_names(self):
         return ['test.json','train.json','redial_kg.json']
@@ -76,9 +95,9 @@ class ReDial(InMemoryDataset):
                 processed_1=reason_path[idx]['node_candidate1']
                 key=str(reason_path[idx]['dialog_num'])+"_"+str(reason_path[idx]['system_turn'])
                 if reason_path[idx]['intent']=="recommend":
-                    data=Data(dialog_history=reason_path[idx]['context'],oracle_response=reason_path[idx]['utterance'],mention_history=reason_path[idx]['mentioned'],node_candidate1=reason_path[idx]['node_candidate1'],label_1=reason_path[idx]['label_1'],node_candidate2=reason_path[idx]['node_candidate2'],label_2=reason_path[idx]['label_2'],intent=reason_path[idx]['intent'],new_mention=reason_path[idx]['new_mentioned'],my_id=key,last_turn=last_turn,gold_pos=reason_path[idx]['gold_pos'],label_rec=reason_path[idx]['label_rec'])
+                    data=Data(dialog_history=reason_path[idx]['context'],oracle_response=reason_path[idx]['utterance'],mention_history=reason_path[idx]['mentioned'],node_candidate1=reason_path[idx]['node_candidate1'],label_1=reason_path[idx]['label_1'],node_candidate2=reason_path[idx]['node_candidate2'],label_2=reason_path[idx]['label_2'],intent=reason_path[idx]['intent'],new_mention=reason_path[idx]['new_mentioned'],my_id=key,last_turn=last_turn,gold_pos=reason_path[idx]['gold_pos'],label_rec=reason_path[idx]['label_rec'],num_nodes=1)
                 else:
-                    data=Data(dialog_history=reason_path[idx]['context'],oracle_response=reason_path[idx]['utterance'],mention_history=reason_path[idx]['mentioned'],node_candidate1=reason_path[idx]['node_candidate1'],label_1=reason_path[idx]['label_1'],node_candidate2=reason_path[idx]['node_candidate2'],label_2=reason_path[idx]['label_2'],intent=reason_path[idx]['intent'],new_mention=reason_path[idx]['new_mentioned'],my_id=key,last_turn=last_turn,gold_pos=[],label_rec=[])
+                    data=Data(dialog_history=reason_path[idx]['context'],oracle_response=reason_path[idx]['utterance'],mention_history=reason_path[idx]['mentioned'],node_candidate1=reason_path[idx]['node_candidate1'],label_1=reason_path[idx]['label_1'],node_candidate2=reason_path[idx]['node_candidate2'],label_2=reason_path[idx]['label_2'],intent=reason_path[idx]['intent'],new_mention=reason_path[idx]['new_mentioned'],my_id=key,last_turn=last_turn,gold_pos=[],label_rec=[],num_nodes=1)
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue
                 if self.pre_transform is not None:
