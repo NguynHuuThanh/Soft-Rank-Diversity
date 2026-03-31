@@ -50,14 +50,14 @@ class GoRecDial(InMemoryDataset):
         train_reason_path=self.raw_paths[1]
         graph_path=self.raw_paths[2]
         bow_path=self.raw_paths[3]
-        f=open(test_reason_path)
-        test_reason_path=json.load(f) 
-        f=open(train_reason_path)
-        train_reason_path=json.load(f)
-        f=open(graph_path)
-        graph=json.load(f)
-        f=open(bow_path)
-        bow=json.load(f)
+        with open(test_reason_path) as f:
+            test_data=json.load(f) 
+        with open(train_reason_path) as f:
+            train_data=json.load(f)
+        with open(graph_path) as f:
+            graph=json.load(f)
+        with open(bow_path) as f:
+            bow=json.load(f)
         flags=['train','test']
 
         relations_names=['time', 'director', 'starring', 'genre', 'subject', 'belong', 'timeR', 'directorR', 'starringR', 'genreR', 'subjectR', 'belongR']
@@ -67,9 +67,9 @@ class GoRecDial(InMemoryDataset):
             data_list = []
             tot=0
             if flag=='train':
-                reason_path=train_reason_path
+                reason_path=train_data
             else:
-                reason_path=test_reason_path
+                reason_path=test_data
             organized_data=[]
 
 

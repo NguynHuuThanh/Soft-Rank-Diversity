@@ -96,6 +96,26 @@ def finalize_coverage(acc, k_values):
     return results
 
 
+def compute_item_coverage_gorecdial(all_rec_lists, n_movies):
+    """
+    Item Coverage for GoRecDial.
+    Coverage@k = fraction of catalog items that appear at least once in
+    any sample's top-k recommendation list.
+    """
+    all_top_items = set()
+    for reclist in all_rec_lists:
+        all_top_items.update(reclist)
+
+    if n_movies > 0:
+        coverage = len(all_top_items) / n_movies
+    else:
+        coverage = 0
+
+    return {
+        'item_coverage': coverage
+    }
+
+
 def compute_item_coverage_redial(all_scores_list, n_movies):
     """
     Item Coverage@10 and Item Coverage@50 for ReDial.
@@ -558,7 +578,7 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
     k_values = args.get('coverage_topk', [1, 10, 50])
     cov_acc = init_coverage_accumulators(k_values)
     dialog_rec_items = []  # accumulate recommended item ids within a dialog
-
+    all_rec_lists = []
     with torch.no_grad():
         for test_batch in tqdm(test_loader):
 
@@ -609,6 +629,7 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
                 # --- Per-turn coverage from score_ex (explicit recommender) ---
                 score_ex_np = score_ex.cpu().numpy() if torch.is_tensor(score_ex) else np.array(score_ex)
                 cand_ids = shuffled_rec_cand[num]  # list of 5 movie ids
+                all_rec_lists.append(cand_ids)
                 turn_vals = accumulate_turn_coverage(cov_acc, score_ex_np, cand_ids, k_values, args)
                 # Collect top items for dialog-level coverage
                 max_k = max(k_values)
@@ -686,6 +707,8 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
         accuracy_split[i]=item/tot_split[i]
 
     coverage_results = finalize_coverage(cov_acc, k_values)
+    item_coverage_results = compute_item_coverage_gorecdial(all_rec_lists, args['movie_count'])
+    coverage_results.update(item_coverage_results)
 
     intent_accuracy=intent_accuracy/tot_turns
     print("turn_1",turn_1)

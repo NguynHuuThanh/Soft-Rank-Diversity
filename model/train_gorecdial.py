@@ -1,4 +1,5 @@
 import sys
+import time
 from transformers import BertModel,BertTokenizer
 from CR_walker import ProRec
 from evaluation import evaluate_rec_gorecdial,evaluate_gen_gorecdial
@@ -38,10 +39,11 @@ parser.add_argument("--lr",type=float,default=1e-3)
 parser.add_argument("--weight_decay",type=float,default=0.01)
 parser.add_argument("--eval_batch",type=int,default=500)
 parser.add_argument("--word_net",action='store_true')
-parser.add_argument("--div_loss_weight",type=float,default=0.67,help="Weight for diversity loss (0 disables)")
-parser.add_argument("--dpp_loss_weight",type=float,default=0.0,help="Weight for DPP loss (0 disables)")
+parser.add_argument("--div_loss_weight",type=float,default=0.0,help="Weight for diversity loss (0 disables)")
+parser.add_argument("--dpp_loss_weight",type=float,default=0.67,help="Weight for DPP loss (0 disables)")
 parser.add_argument("--div_temperature",type=float,default=0.1,help="Temperature for softmax in diversity loss")
 parser.add_argument("--coverage_topk",type=str,default="1,10,50",help="Comma-separated k values for coverage metrics")
+parser.add_argument("--early_stop_patience", type=int, default=5, help="Epochs to wait for improvement before early stopping.")
 
 t_args = parser.parse_args()
 
@@ -103,6 +105,7 @@ if option=="train":
                 stats_all[f'{_m}@{_k}']=[]        
         best_chat_1=0
         best_turn_1=0
+        epochs_no_improve = 0
 
     
     
@@ -142,6 +145,7 @@ if option=="train":
 
    
 
+    start_time = time.time()
     for i in range(max_epoch):
         for batch in train_loader:
             #print(batch.my_id)
@@ -154,10 +158,13 @@ if option=="train":
             loss.backward()
             optimizer.step()
 
-            print("iter ",num,":",loss.item())
-            
+            # print("iter ",num,":",loss.item())
+            if num % 1000==0:
+                print("iter ",num,":",loss.item())
             
             if (num+1) % t_args.eval_batch ==0:
+                print(f"Batch: {num+1}")
+                print(f"Total training time: {time.time() - start_time}")
                 prorec.eval()
                 intent_accuracy,turn_1,turn_3,chat_1,chat_3,turn_1_ex,turn_3_ex,chat_1_ex,chat_3_ex,coverage_results=evaluate_rec_gorecdial(test_loader,prorec,graph_data,bow_data,args)
                 stats_all['intent_accuracy'].append(intent_accuracy)
@@ -181,6 +188,9 @@ if option=="train":
                         best_chat_1=chat_1_ex
                     print("saving model...")
                     torch.save(prorec.state_dict(),save_path)
+                    epochs_no_improve = 0
+                else:
+                    epochs_no_improve += 1
             
 
                 prorec.train()
@@ -190,6 +200,9 @@ if option=="train":
                 json.dump(stats_all,f)
                 f.close()
             num+=1
+        if epochs_no_improve >= t_args.early_stop_patience:
+            print(f"Early stopping after {i+1} epochs.")
+            break
 
 elif option=="test":
     print("testing model recommendation...")
@@ -210,7 +223,7 @@ elif option=="test_gen":
 
     for key in state_dict.keys():
         print(key)
-    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,dataset="gorecdial",div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature,dpp_loss_weight=t_args.dpp_loss_weight)
+    prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,word_net=t_args.word_net,dataset="gorecdial",div_loss_weight=t_args.div_loss_weight,div_temperature=t.args.div_temperature,dpp_loss_weight=t.args.dpp_loss_weight)
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)
