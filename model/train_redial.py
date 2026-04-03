@@ -1,6 +1,7 @@
 import sys
 import os.path as osp
 from transformers import BertModel,BertTokenizer
+from termcolor import colored
 
 PROJECT_ROOT = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
@@ -65,6 +66,8 @@ save_path=osp.join(root,"saved","best_model_"+t_args.model_name+".pt")
 save_path_1=osp.join(root,"saved","best_model_"+t_args.model_name+"_1.pt")
 save_path_10=osp.join(root,"saved","best_model_"+t_args.model_name+"_10.pt")
 save_path_50=osp.join(root,"saved","best_model_"+t_args.model_name+"_50.pt")
+save_path_cov10=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov10.pt")
+save_path_cov50=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov50.pt")
 path=osp.join(root,"data","redial")
 redial_train=ReDial(path,flag="train")
 redial_test=ReDial(path,flag="test")
@@ -109,11 +112,15 @@ if t_args.option=="train":
         best_recall_1=0
         best_recall_10=0
         best_recall_50=0
+        best_coverage_10 = 0
+        best_coverage_50 = 0
         stats_all={"recall_1":[],"recall_10":[],"recall_50":[]}
         # Add coverage metric keys
         for _k in args['coverage_topk']:
-            for _m in ['kg_cov_turn','cat_cov_turn','kg_cov_dialog','cat_cov_dialog']:
+            for _m in ['kg_cov_turn','kg_cov_dialog']:
                 stats_all[f'{_m}@{_k}']=[]
+        stats_all['item_coverage@10'] = []
+        stats_all['item_coverage@50'] = []
 
     unfreeze_layers = ["utter_embedder.rnn","intent_selector","graph_embedder","graph_walker","Wa","Ww"] #"intent_selector"
 
@@ -176,7 +183,7 @@ if t_args.option=="train":
             epoch_steps += 1
 
             # Per-iteration log (controlled by --log_interval; 0 = silent)
-            if t_args.log_interval > 0 and (num % t_args.log_interval) == 0:
+            if t_args.log_interval > 0 and (num % (t_args.log_interval*10)) == 0:
                 print(f"[Train][Epoch {i+1}/{max_epoch}][Iter {num}] loss={loss_val:.6f}")
 
             if (num+1) % t_args.eval_batch == 0:
@@ -203,6 +210,16 @@ if t_args.option=="train":
                     best_recall_50=recall_50
                     print("saving model...")
                     torch.save(prorec.state_dict(),save_path_50)
+
+                if coverage_results['item_coverage@10'] > best_coverage_10:
+                    best_coverage_10 = coverage_results['item_coverage@10']
+                    print(colored('item_coverage@10 new high, saving model...','green'))
+                    torch.save(prorec.state_dict(), save_path_cov10)
+
+                if coverage_results['item_coverage@50'] > best_coverage_50:
+                    best_coverage_50 = coverage_results['item_coverage@50']
+                    print(colored('item_coverage@50 new high, saving model...','green'))
+                    torch.save(prorec.state_dict(), save_path_cov50)
                 prorec.train()
                 f=open('stats_'+model_name+'.json','w')
                 json.dump(stats_all,f)

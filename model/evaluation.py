@@ -37,25 +37,12 @@ def compute_kg_coverage(topk_item_ids, movie_kg_neighbors, total_reachable_entit
     return len(covered) / total_reachable_entities
 
 
-def compute_cat_coverage(topk_item_ids, movie_kg_relation_types, total_relation_types):
-    """
-    Category Coverage@k: fraction of distinct directed relation types
-    represented in the 1-hop neighborhoods of the top-k items.
-    """
-    covered = set()
-    for item_id in topk_item_ids:
-        covered |= movie_kg_relation_types.get(item_id, set())
-    return len(covered) / total_relation_types
-
-
 def init_coverage_accumulators(k_values):
     """Return fresh per-turn and per-dialog accumulator dicts for all k."""
     acc = {}
     for k in k_values:
         acc[f'kg_cov_turn@{k}'] = []
-        acc[f'cat_cov_turn@{k}'] = []
         acc[f'kg_cov_dialog@{k}'] = []
-        acc[f'cat_cov_dialog@{k}'] = []
     return acc
 
 
@@ -66,9 +53,7 @@ def accumulate_turn_coverage(acc, scores_array, item_ids, k_values, args):
     Returns the per-turn kg/cat values for the current turn (for dialog agg).
     """
     movie_kg_neighbors = args['movie_kg_neighbors']
-    movie_kg_relation_types = args['movie_kg_relation_types']
     total_reachable = args['total_reachable_entities']
-    total_rel = args['total_relation_types']
 
     # Rank item_ids by descending score
     ranked_indices = sorted(range(len(scores_array)), key=lambda x: -scores_array[x])
@@ -78,10 +63,8 @@ def accumulate_turn_coverage(acc, scores_array, item_ids, k_values, args):
     for k in k_values:
         topk = ranked_items[:k]
         kg = compute_kg_coverage(topk, movie_kg_neighbors, total_reachable)
-        cat = compute_cat_coverage(topk, movie_kg_relation_types, total_rel)
         acc[f'kg_cov_turn@{k}'].append(kg)
-        acc[f'cat_cov_turn@{k}'].append(cat)
-        turn_vals[k] = (kg, cat)
+        turn_vals[k] = kg
     return turn_vals
 
 
@@ -89,7 +72,7 @@ def finalize_coverage(acc, k_values):
     """Average all accumulator lists and return a flat results dict."""
     results = {}
     for k in k_values:
-        for metric in ['kg_cov_turn', 'cat_cov_turn', 'kg_cov_dialog', 'cat_cov_dialog']:
+        for metric in ['kg_cov_turn', 'kg_cov_dialog']:
             key = f'{metric}@{k}'
             vals = acc[key]
             results[key] = sum(vals) / max(len(vals), 1)
@@ -520,9 +503,7 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
                     for k in k_values:
                         topk_dialog = dialog_rec_items[:k] if len(dialog_rec_items) >= k else dialog_rec_items
                         kg = compute_kg_coverage(topk_dialog, args['movie_kg_neighbors'], args['total_reachable_entities'])
-                        cat = compute_cat_coverage(topk_dialog, args['movie_kg_relation_types'], args['total_relation_types'])
                         cov_acc[f'kg_cov_dialog@{k}'].append(kg)
-                        cov_acc[f'cat_cov_dialog@{k}'].append(cat)
                     dialog_rec_items = []
 
             if batches==eval_batch:
@@ -537,9 +518,6 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
     coverage_results = finalize_coverage(cov_acc, k_values)
     item_coverage_results = compute_item_coverage_redial(all_scores_list, args['movie_count'])
     coverage_results.update(item_coverage_results)
-
-    print("recall_1",recall_1)
-    print('recall_10:',recall_10)
     print("recall_50:",recall_50)
     for key, val in sorted(coverage_results.items()):
         print(f"{key}: {val:.4f}")
@@ -686,9 +664,7 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
                         for k in k_values:
                             topk_dialog = dialog_rec_items[:k] if len(dialog_rec_items) >= k else dialog_rec_items
                             kg = compute_kg_coverage(topk_dialog, args['movie_kg_neighbors'], args['total_reachable_entities'])
-                            cat = compute_cat_coverage(topk_dialog, args['movie_kg_relation_types'], args['total_relation_types'])
                             cov_acc[f'kg_cov_dialog@{k}'].append(kg)
-                            cov_acc[f'cat_cov_dialog@{k}'].append(cat)
                         dialog_rec_items = []
                 else:
                     turn+=1
@@ -865,6 +841,7 @@ def evaluate_gen_gorecdial(test_loader:DataLoader, model:ProRec, graph_data, bow
                     selected_2=select_layer_2(step2,grp_index_2.cpu().numpy(),grp_bat_index_2.cpu().numpy(),intent_index_2.cpu().numpy(),node_candidate2,cur_batch_size,args)
                 else:
                     selected_2=[[[]]]
+
             
             for i in range(len(selected_1)):
                 for j in range(len(selected_1[i])):

@@ -130,3 +130,7 @@ dmypy.json
 
 redial*
 myenv*
+
+saved/*
+
+data/*
