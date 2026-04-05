@@ -518,6 +518,9 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
     coverage_results = finalize_coverage(cov_acc, k_values)
     item_coverage_results = compute_item_coverage_redial(all_scores_list, args['movie_count'])
     coverage_results.update(item_coverage_results)
+
+    print("recall_1",recall_1)
+    print('recall_10:',recall_10)
     print("recall_50:",recall_50)
     for key, val in sorted(coverage_results.items()):
         print(f"{key}: {val:.4f}")
