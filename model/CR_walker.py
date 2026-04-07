@@ -44,6 +44,7 @@ class ProRec(nn.Module):
         self.div_temperature=div_temperature
         # DPP loss hyperparameter
         self.dpp_loss_weight=dpp_loss_weight
+        self.last_train_loss_terms = {'base_loss': 0.0, 'div_loss': 0.0, 'dpp_loss': 0.0, 'final_loss': 0.0}
         
 
         self.device=torch.device(device_str)
@@ -416,7 +417,10 @@ class ProRec(nn.Module):
         #logits=logits+self.Wo.bias.index_select(0,alignment_index)
         
 
-        tot_loss=walk_loss_1+walk_loss_2+intent_loss+0.025*reg_loss#
+        base_loss = walk_loss_1 + walk_loss_2 + intent_loss + 0.025 * reg_loss
+        tot_loss = base_loss
+        div_loss_term = torch.tensor(0.0, device=self.device)
+        dpp_loss_term = torch.tensor(0.0, device=self.device)
 
         # --- Diversity loss for ReDial ---
         if self.div_loss_weight > 0:
@@ -453,7 +457,8 @@ class ProRec(nn.Module):
                 rec_scores = dense_scores[has_rec]   # [B', mc]
                 rec_mask   = dense_mask[has_rec]     # [B', mc]
                 div_loss = self.compute_diversity_loss(rec_scores, graph_embed, mask=rec_mask)
-                tot_loss = tot_loss + self.div_loss_weight * div_loss
+                div_loss_term = self.div_loss_weight * div_loss
+                tot_loss = tot_loss + div_loss_term
 
         # --- DPP loss for ReDial (complementary to diversity loss) ---
         if self.dpp_loss_weight > 0:
@@ -485,7 +490,15 @@ class ProRec(nn.Module):
 
                 if len(per_sample_losses) > 0:
                     dpp_loss = torch.mean(torch.stack(per_sample_losses))
-                    tot_loss = tot_loss + self.dpp_loss_weight * dpp_loss
+                    dpp_loss_term = self.dpp_loss_weight * dpp_loss
+                    tot_loss = tot_loss + dpp_loss_term
+
+        self.last_train_loss_terms = {
+            'base_loss': base_loss.detach().item(),
+            'div_loss': div_loss_term.detach().item(),
+            'dpp_loss': dpp_loss_term.detach().item(),
+            'final_loss': tot_loss.detach().item()
+        }
 
         return intent,paths,tot_loss
 

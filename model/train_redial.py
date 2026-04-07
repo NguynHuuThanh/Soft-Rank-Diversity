@@ -48,8 +48,8 @@ parser.add_argument("--lr",type=float,default=5e-4)
 parser.add_argument("--weight_decay",type=float,default=0.01)
 parser.add_argument("--eval_batch",type=int,default=5000)
 parser.add_argument("--word_net",action='store_true')
-parser.add_argument("--div_loss_weight",type=float,default=1.23,help="Weight for diversity loss (0 disables)")
-parser.add_argument("--dpp_loss_weight",type=float,default=0.0,help="Weight for DPP loss (0 disables)")
+parser.add_argument("--div_loss_weight",type=float,default=0.0,help="Weight for diversity loss (0 disables)")
+parser.add_argument("--dpp_loss_weight",type=float,default=1.23,help="Weight for DPP loss (0 disables)")
 parser.add_argument("--div_temperature",type=float,default=0.1,help="Temperature for softmax in diversity loss")
 parser.add_argument("--coverage_topk",type=str,default="1,10,50",help="Comma-separated k values for coverage metrics")
 parser.add_argument("--log_interval",type=int,default=100,help="Print per-iteration loss every N iterations (0 = silent)")
@@ -184,7 +184,17 @@ if t_args.option=="train":
 
             # Per-iteration log (controlled by --log_interval; 0 = silent)
             if t_args.log_interval > 0 and (num % (t_args.log_interval*10)) == 0:
-                print(f"[Train][Epoch {i+1}/{max_epoch}][Iter {num}] loss={loss_val:.6f}")
+                loss_terms = getattr(prorec, 'last_train_loss_terms', None)
+                if loss_terms is not None:
+                    print(
+                        f"[Train][Epoch {i+1}/{max_epoch}][Iter {num}] "
+                        f"base_loss={loss_terms.get('base_loss', 0.0):.6f} "
+                        f"div_loss={loss_terms.get('div_loss', 0.0):.6f} "
+                        f"dpp_loss={loss_terms.get('dpp_loss', 0.0):.6f} "
+                        f"final_loss={loss_terms.get('final_loss', loss_val):.6f}"
+                    )
+                else:
+                    print(f"[Train][Epoch {i+1}/{max_epoch}][Iter {num}] loss={loss_val:.6f}")
 
             if (num+1) % t_args.eval_batch == 0:
                 prorec.eval()
