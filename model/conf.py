@@ -9,6 +9,8 @@ args={}
 
 
 def preprocess():
+    if args.get('dataset') == 'tgredial':
+        return preprocess_tgredial()
     with open(args['graph_path'],'r') as f:
         graph=json.load(f)
     nodes=graph["nodes"]
@@ -85,6 +87,60 @@ def preprocess():
 
 
 
+def preprocess_tgredial():
+    """Build args for TG-ReDial KG ({entity, edge, n_relation}, no node types)."""
+    with open(args['graph_path'], 'r', encoding='utf-8') as f:
+        graph = json.load(f)
+    entities = graph['entity']
+    edges = graph['edge']
+    n_relation = int(graph.get('n_relation', 0))
+
+    # Movies are listed separately in movie_ids.json. Treat that set as the
+    # "movie" partition for attribute / coverage caches.
+    root = osp.dirname(osp.dirname(osp.abspath(__file__)))
+    with open(osp.join(root, 'data', 'tgredial', 'movie_ids.json'), 'r') as f:
+        movie_ids = set(int(m) for m in json.load(f))
+
+    movie_count = len(movie_ids)
+    n_ent = len(entities)
+    attribute_dict = [set() for _ in range(n_ent)]
+    for src, dst, _rel in edges:
+        src_i = int(src); dst_i = int(dst)
+        if src_i >= n_ent or dst_i >= n_ent:
+            continue  # 12 stray edges in tgredial_kg.json reference unknown ids
+        if src_i in movie_ids:
+            attribute_dict[src_i].add(dst_i)
+        elif dst_i in movie_ids:
+            attribute_dict[src_i].add(dst_i)
+
+    args['generals'] = []
+    args['generals_dict'] = {}
+    args['attribute_dict'] = attribute_dict
+    args['movie_count'] = movie_count
+    args['nodes'] = entities  # raw entity name list (no per-node type tag)
+
+    movie_kg_neighbors = {}
+    movie_kg_relation_types = {}
+    for src, dst, rel in edges:
+        src_i = int(src); dst_i = int(dst); rel_i = int(rel)
+        if src_i >= n_ent or dst_i >= n_ent:
+            continue
+        if src_i in movie_ids:
+            movie_kg_neighbors.setdefault(src_i, set()).add(dst_i)
+            movie_kg_relation_types.setdefault(src_i, set()).add(rel_i)
+
+    total_reachable = set()
+    for ns in movie_kg_neighbors.values():
+        total_reachable |= ns
+
+    args['movie_kg_neighbors'] = movie_kg_neighbors
+    args['movie_kg_relation_types'] = movie_kg_relation_types
+    args['total_reachable_entities'] = max(len(total_reachable), 1)
+    args['total_relation_types'] = n_relation
+    print('[tgredial] entities=', len(entities), 'movies=', movie_count,
+          'edges=', len(edges), 'relations=', n_relation)
+
+
 def add_generic_args(dataset='redial'):
     args['dataset']=dataset
     args['device']=torch.device('cuda:0')
@@ -117,6 +173,34 @@ def add_generic_args(dataset='redial'):
         args['none_node']=30458
         
         
+    elif dataset == 'tgredial':
+        # No id2name file ships with TG-ReDial in this branch; the entity
+        # name list is loaded directly from the KG inside preprocess_tgredial
+        # and stored in args['nodes']. Provide empty placeholders so the
+        # rest of the code that does `args['id2name'].get(...)` keeps working.
+        args['id2name'] = {}
+        args['mid2name'] = {}
+        args['threshold'] = [[-1, -1, -1], [-1, -1, -1]]
+        args['max_leaf'] = 2
+        args['sample'] = 1
+
+        args['data_path'] = osp.join(root, "data", 'tgredial')
+        args['graph_path'] = osp.join(root, "data", 'tgredial_kg.json')
+        gpt_path = osp.join(root, "data", "tgredial_gpt")
+        args['gen_conf'] = {
+            'gpt_path': gpt_path,
+            'top_k': top_k,
+            'top_p': top_p,
+            'max_length': max_length,
+            'temperature': temperature,
+        }
+        args['DA_save_path'] = osp.join(root, "saved", 'tgredial_DA.json')
+        args['utter_save_path'] = osp.join(root, "saved", 'tgredial_gen.json')
+        # Reserve a sentinel "none" id one past the entity range.
+        with open(osp.join(root, 'data', 'tgredial_kg.json'), 'r', encoding='utf-8') as f:
+            _kg = json.load(f)
+        args['none_node'] = len(_kg['entity']) - 1
+
     else:
         with open(osp.join(root,"data",'id2name_gorecdial.json'), 'r') as f:
             args['id2name']=json.load(f)

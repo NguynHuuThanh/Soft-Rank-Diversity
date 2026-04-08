@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
-from torch_scatter import segment_coo
 
 
 class IntentSelector(nn.Module):

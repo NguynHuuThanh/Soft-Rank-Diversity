@@ -25,7 +25,7 @@ import time
 import torch.nn.functional as F
 from torch.autograd import Variable
 from tqdm import trange,tqdm
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 
 
 device_str = 'cuda:0'

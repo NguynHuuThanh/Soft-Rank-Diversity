@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import argparse
 
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 
 
 

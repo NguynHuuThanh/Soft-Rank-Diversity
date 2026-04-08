@@ -11,7 +11,7 @@ import math
 import random
 
 from CR_walker import ProRec
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 
 PROJECT_ROOT = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:

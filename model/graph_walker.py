@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch_scatter import scatter
+from torch_geometric.utils import scatter
 from copy import deepcopy
 from conf import args,add_generic_args
 import random
@@ -11,7 +11,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 from data.redial import ReDial
 from data.gorecdial import GoRecDial
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 
 
 
