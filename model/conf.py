@@ -1,5 +1,6 @@
 import torch
 import json
+from collections import defaultdict
 from copy import deepcopy
 import os.path as osp
 
@@ -101,8 +102,16 @@ def preprocess_tgredial():
     with open(osp.join(root, 'data', 'tgredial', 'movie_ids.json'), 'r') as f:
         movie_ids = set(int(m) for m in json.load(f))
 
-    movie_count = len(movie_ids)
     n_ent = len(entities)
+    # CR-Walker assumes "movies" occupy contiguous entity positions
+    # 0..movie_count-1 (true for ReDial; *not* true for TG-ReDial where
+    # movies are scattered through the entity id space). Pretending the
+    # entire entity range is the candidate space keeps label_rec / score
+    # vector indices aligned. The actual movie set is kept in
+    # args['actual_movie_ids'] for downstream metric computation.
+    args['actual_movie_ids'] = movie_ids
+    args['actual_movie_count'] = len(movie_ids)
+    movie_count = n_ent
     attribute_dict = [set() for _ in range(n_ent)]
     for src, dst, _rel in edges:
         src_i = int(src); dst_i = int(dst)
@@ -114,7 +123,11 @@ def preprocess_tgredial():
             attribute_dict[src_i].add(dst_i)
 
     args['generals'] = []
-    args['generals_dict'] = {}
+    # TG-ReDial has no name-based general categories like ReDial; use a
+    # defaultdict so eval code that does `step_general_dict[type].add(...)`
+    # or `step_general_dict[entity_name]` always finds a (possibly empty)
+    # set instead of crashing on KeyError.
+    args['generals_dict'] = defaultdict(set)
     args['attribute_dict'] = attribute_dict
     args['movie_count'] = movie_count
     # Eval code (model/evaluation.py:select_layer_1) expects ReDial-shaped
