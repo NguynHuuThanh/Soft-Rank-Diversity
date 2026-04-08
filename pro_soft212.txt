@@ -1,0 +1,358 @@
+recall_1 0.018562874251497007
+recall_10: 0.11736526946107785
+recall_50: 0.2818363273453094
+item_coverage@10: 0.1075
+item_coverage@50: 0.3127
+kg_cov_dialog@1: 0.0015
+kg_cov_dialog@10: 0.0096
+kg_cov_dialog@50: 0.0357
+kg_cov_turn@1: 0.0016
+kg_cov_turn@10: 0.0100
+kg_cov_turn@50: 0.0361
+[Epoch Eval] epoch=1  recall@1=0.018563  recall@10=0.117365  recall@50=0.281836
+[Train][Epoch 2/60][Iter 4000] base_loss=383.392761 div_loss=2.072461 dpp_loss=0.000000 final_loss=385.465210
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:09<00:00,  1.08it/s]
+recall_1 0.023353293413173652
+recall_10: 0.13912175648702596
+recall_50: 0.31057884231536925
+item_coverage@10: 0.1726
+item_coverage@50: 0.4246
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0087
+kg_cov_dialog@50: 0.0339
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0093
+kg_cov_turn@50: 0.0343
+saving model...
+saving model...
+saving model...
+item_coverage@10 new high, saving model...
+item_coverage@50 new high, saving model...
+[Train][Epoch 2/60][Iter 5000] base_loss=209.839874 div_loss=2.081701 dpp_loss=0.000000 final_loss=211.921570
+[Train][Epoch 2/60][Iter 6000] base_loss=145.811554 div_loss=2.104798 dpp_loss=0.000000 final_loss=147.916351
+[Epoch End] 2/60  avg_train_loss=233.582082  epoch_train_time=1784.09s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:41<00:00,  1.01s/it]
+recall_1 0.02694610778443114
+recall_10: 0.13812375249501
+recall_50: 0.3157684630738523
+item_coverage@10: 0.1440
+item_coverage@50: 0.3601
+kg_cov_dialog@1: 0.0011
+kg_cov_dialog@10: 0.0092
+kg_cov_dialog@50: 0.0355
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0096
+kg_cov_turn@50: 0.0352
+[Epoch Eval] epoch=2  recall@1=0.026946  recall@10=0.138124  recall@50=0.315768
+[Train][Epoch 3/60][Iter 7000] base_loss=233.397629 div_loss=2.063997 dpp_loss=0.000000 final_loss=235.461624
+[Train][Epoch 3/60][Iter 8000] base_loss=160.873459 div_loss=2.076335 dpp_loss=0.000000 final_loss=162.949799
+[Train][Epoch 3/60][Iter 9000] base_loss=258.991638 div_loss=2.050868 dpp_loss=0.000000 final_loss=261.042511
+[Epoch End] 3/60  avg_train_loss=216.860974  epoch_train_time=1888.15s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:53<00:00,  1.04s/it]
+recall_1 0.025748502994011976
+recall_10: 0.1409181636726547
+recall_50: 0.31077844311377245
+item_coverage@10: 0.2070
+item_coverage@50: 0.4925
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0090
+kg_cov_dialog@50: 0.0336
+kg_cov_turn@1: 0.0014
+kg_cov_turn@10: 0.0094
+kg_cov_turn@50: 0.0339
+[Epoch Eval] epoch=3  recall@1=0.025749  recall@10=0.140918  recall@50=0.310778
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:03<00:00,  1.10it/s]
+recall_1 0.025149700598802394
+recall_10: 0.14251497005988023
+recall_50: 0.31796407185628744
+item_coverage@10: 0.1999
+item_coverage@50: 0.4343
+kg_cov_dialog@1: 0.0011
+kg_cov_dialog@10: 0.0089
+kg_cov_dialog@50: 0.0337
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0092
+kg_cov_turn@50: 0.0339
+saving model...
+saving model...
+saving model...
+item_coverage@10 new high, saving model...
+item_coverage@50 new high, saving model...
+[Train][Epoch 4/60][Iter 10000] base_loss=172.189423 div_loss=1.991092 dpp_loss=0.000000 final_loss=174.180511
+[Train][Epoch 4/60][Iter 11000] base_loss=196.630890 div_loss=2.119982 dpp_loss=0.000000 final_loss=198.750870
+[Train][Epoch 4/60][Iter 12000] base_loss=180.069931 div_loss=2.066965 dpp_loss=0.000000 final_loss=182.136902
+[Epoch End] 4/60  avg_train_loss=205.974686  epoch_train_time=1726.13s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:15<00:00,  1.06it/s]
+recall_1 0.028942115768463075
+recall_10: 0.1469061876247505
+recall_50: 0.3333333333333333
+item_coverage@10: 0.2104
+item_coverage@50: 0.4609
+kg_cov_dialog@1: 0.0011
+kg_cov_dialog@10: 0.0090
+kg_cov_dialog@50: 0.0344
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0094
+kg_cov_turn@50: 0.0345
+[Epoch Eval] epoch=4  recall@1=0.028942  recall@10=0.146906  recall@50=0.333333
+[Train][Epoch 5/60][Iter 13000] base_loss=307.320923 div_loss=2.092052 dpp_loss=0.000000 final_loss=309.412964
+[Train][Epoch 5/60][Iter 14000] base_loss=239.703766 div_loss=2.092314 dpp_loss=0.000000 final_loss=241.796082
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [08:16<00:00,  1.24s/it]
+recall_1 0.026746506986027943
+recall_10: 0.1534930139720559
+recall_50: 0.3287425149700599
+item_coverage@10: 0.2390
+item_coverage@50: 0.5029
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0091
+kg_cov_dialog@50: 0.0339
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0093
+kg_cov_turn@50: 0.0340
+saving model...
+saving model...
+saving model...
+item_coverage@10 new high, saving model...
+item_coverage@50 new high, saving model...
+[Train][Epoch 5/60][Iter 15000] base_loss=214.988586 div_loss=2.111678 dpp_loss=0.000000 final_loss=217.100266
+[Epoch End] 5/60  avg_train_loss=196.496635  epoch_train_time=2177.47s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:54<00:00,  1.04s/it]
+recall_1 0.03273453093812375
+recall_10: 0.14830339321357286
+recall_50: 0.3347305389221557
+item_coverage@10: 0.2353
+item_coverage@50: 0.5064
+kg_cov_dialog@1: 0.0010
+kg_cov_dialog@10: 0.0083
+kg_cov_dialog@50: 0.0323
+kg_cov_turn@1: 0.0012
+kg_cov_turn@10: 0.0088
+kg_cov_turn@50: 0.0330
+[Epoch Eval] epoch=5  recall@1=0.032735  recall@10=0.148303  recall@50=0.334731
+[Train][Epoch 6/60][Iter 16000] base_loss=337.133484 div_loss=2.104060 dpp_loss=0.000000 final_loss=339.237549
+[Train][Epoch 6/60][Iter 17000] base_loss=160.987701 div_loss=2.088479 dpp_loss=0.000000 final_loss=163.076187
+[Train][Epoch 6/60][Iter 18000] base_loss=77.437881 div_loss=2.070259 dpp_loss=0.000000 final_loss=79.508141
+[Epoch End] 6/60  avg_train_loss=191.658783  epoch_train_time=2118.83s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [07:50<00:00,  1.18s/it]
+recall_1 0.02654690618762475
+recall_10: 0.1499001996007984
+recall_50: 0.3143712574850299
+item_coverage@10: 0.2844
+item_coverage@50: 0.5812
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0087
+kg_cov_dialog@50: 0.0339
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0091
+kg_cov_turn@50: 0.0341
+[Epoch Eval] epoch=6  recall@1=0.026547  recall@10=0.149900  recall@50=0.314371
+[Train][Epoch 7/60][Iter 19000] base_loss=215.931412 div_loss=2.076332 dpp_loss=0.000000 final_loss=218.007736
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:48<00:00,  1.02s/it]
+recall_1 0.026347305389221556
+recall_10: 0.14610778443113773
+recall_50: 0.3253493013972056
+item_coverage@10: 0.2913
+item_coverage@50: 0.5893
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0089
+kg_cov_dialog@50: 0.0342
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0092
+kg_cov_turn@50: 0.0343
+item_coverage@10 new high, saving model...
+item_coverage@50 new high, saving model...
+[Train][Epoch 7/60][Iter 20000] base_loss=186.338623 div_loss=2.119998 dpp_loss=0.000000 final_loss=188.458618
+[Train][Epoch 7/60][Iter 21000] base_loss=135.984589 div_loss=2.062417 dpp_loss=0.000000 final_loss=138.047012
+[Epoch End] 7/60  avg_train_loss=185.678430  epoch_train_time=1951.43s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:58<00:00,  1.05s/it]
+recall_1 0.029540918163672655
+recall_10: 0.1469061876247505
+recall_50: 0.3269461077844311
+item_coverage@10: 0.2662
+item_coverage@50: 0.5404
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0085
+kg_cov_dialog@50: 0.0338
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0089
+kg_cov_turn@50: 0.0337
+[Epoch Eval] epoch=7  recall@1=0.029541  recall@10=0.146906  recall@50=0.326946
+[EarlyStop] No epoch-level improvement: 1/5
+[Train][Epoch 8/60][Iter 22000] base_loss=186.116699 div_loss=2.117958 dpp_loss=0.000000 final_loss=188.234650
+[Train][Epoch 8/60][Iter 23000] base_loss=116.980965 div_loss=1.908965 dpp_loss=0.000000 final_loss=118.889931
+[Train][Epoch 8/60][Iter 24000] base_loss=179.632004 div_loss=2.036120 dpp_loss=0.000000 final_loss=181.668121
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [07:02<00:00,  1.06s/it]
+recall_1 0.029141716566866267
+recall_10: 0.15269461077844312
+recall_50: 0.32275449101796405
+item_coverage@10: 0.2949
+item_coverage@50: 0.5979
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0086
+kg_cov_dialog@50: 0.0337
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0090
+kg_cov_turn@50: 0.0337
+saving model...
+item_coverage@10 new high, saving model...
+item_coverage@50 new high, saving model...
+[Train][Epoch 8/60][Iter 25000] base_loss=105.060616 div_loss=2.015710 dpp_loss=0.000000 final_loss=107.076324
+[Epoch End] 8/60  avg_train_loss=182.246964  epoch_train_time=2012.54s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [07:00<00:00,  1.06s/it]
+recall_1 0.031137724550898204
+recall_10: 0.15528942115768463
+recall_50: 0.3387225548902196
+item_coverage@10: 0.2668
+item_coverage@50: 0.5394
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0084
+kg_cov_dialog@50: 0.0338
+kg_cov_turn@1: 0.0014
+kg_cov_turn@10: 0.0091
+kg_cov_turn@50: 0.0341
+[Epoch Eval] epoch=8  recall@1=0.031138  recall@10=0.155289  recall@50=0.338723
+[Train][Epoch 9/60][Iter 26000] base_loss=270.274872 div_loss=2.068485 dpp_loss=0.000000 final_loss=272.343353
+[Train][Epoch 9/60][Iter 27000] base_loss=106.937233 div_loss=2.119951 dpp_loss=0.000000 final_loss=109.057182
+[Train][Epoch 9/60][Iter 28000] base_loss=183.829895 div_loss=2.089112 dpp_loss=0.000000 final_loss=185.919006
+[Epoch End] 9/60  avg_train_loss=179.141267  epoch_train_time=1540.30s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:45<00:00,  1.02s/it]
+recall_1 0.02654690618762475
+recall_10: 0.15149700598802396
+recall_50: 0.3313373253493014
+item_coverage@10: 0.2760
+item_coverage@50: 0.5605
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0089
+kg_cov_dialog@50: 0.0342
+kg_cov_turn@1: 0.0014
+kg_cov_turn@10: 0.0092
+kg_cov_turn@50: 0.0345
+[Epoch Eval] epoch=9  recall@1=0.026547  recall@10=0.151497  recall@50=0.331337
+[EarlyStop] No epoch-level improvement: 1/5
+[Train][Epoch 10/60][Iter 29000] base_loss=147.849152 div_loss=2.012054 dpp_loss=0.000000 final_loss=149.861206
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:54<00:00,  1.04s/it]
+recall_1 0.028942115768463075
+recall_10: 0.14610778443113773
+recall_50: 0.3377245508982036
+item_coverage@10: 0.2903
+item_coverage@50: 0.5715
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0092
+kg_cov_dialog@50: 0.0341
+kg_cov_turn@1: 0.0014
+kg_cov_turn@10: 0.0093
+kg_cov_turn@50: 0.0340
+saving model...
+[Train][Epoch 10/60][Iter 30000] base_loss=191.909134 div_loss=2.023654 dpp_loss=0.000000 final_loss=193.932785
+[Train][Epoch 10/60][Iter 31000] base_loss=198.371765 div_loss=2.063774 dpp_loss=0.000000 final_loss=200.435532
+[Epoch End] 10/60  avg_train_loss=177.433804  epoch_train_time=1962.16s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [07:02<00:00,  1.06s/it]
+recall_1 0.024351297405189622
+recall_10: 0.1530938123752495
+recall_50: 0.33073852295409184
+item_coverage@10: 0.2747
+item_coverage@50: 0.5462
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0087
+kg_cov_dialog@50: 0.0340
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0091
+kg_cov_turn@50: 0.0343
+[Epoch Eval] epoch=10  recall@1=0.024351  recall@10=0.153094  recall@50=0.330739
+[EarlyStop] No epoch-level improvement: 2/5
+[Train][Epoch 11/60][Iter 32000] base_loss=157.925201 div_loss=1.890124 dpp_loss=0.000000 final_loss=159.815323
+[Train][Epoch 11/60][Iter 33000] base_loss=106.955368 div_loss=2.054762 dpp_loss=0.000000 final_loss=109.010132
+[Train][Epoch 11/60][Iter 34000] base_loss=158.091690 div_loss=2.066080 dpp_loss=0.000000 final_loss=160.157776
+[Epoch End] 11/60  avg_train_loss=175.071671  epoch_train_time=1534.28s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:38<00:00,  1.00it/s]
+recall_1 0.028942115768463075
+recall_10: 0.1532934131736527
+recall_50: 0.3277445109780439
+item_coverage@10: 0.3089
+item_coverage@50: 0.5885
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0089
+kg_cov_dialog@50: 0.0346
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0091
+kg_cov_turn@50: 0.0343
+[Epoch Eval] epoch=11  recall@1=0.028942  recall@10=0.153293  recall@50=0.327745
+[EarlyStop] No epoch-level improvement: 3/5
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:38<00:00,  1.00it/s]
+recall_1 0.03173652694610778
+recall_10: 0.15768463073852296
+recall_50: 0.3508982035928144
+item_coverage@10: 0.2910
+item_coverage@50: 0.5640
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0087
+kg_cov_dialog@50: 0.0338
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0091
+kg_cov_turn@50: 0.0342
+saving model...
+saving model...
+saving model...
+[Train][Epoch 12/60][Iter 35000] base_loss=292.535950 div_loss=2.119999 dpp_loss=0.000000 final_loss=294.655945
+[Train][Epoch 12/60][Iter 36000] base_loss=238.800278 div_loss=2.031785 dpp_loss=0.000000 final_loss=240.832062
+[Train][Epoch 12/60][Iter 37000] base_loss=206.288696 div_loss=2.119979 dpp_loss=0.000000 final_loss=208.408676
+[Epoch End] 12/60  avg_train_loss=173.974789  epoch_train_time=1905.88s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:38<00:00,  1.00it/s]
+recall_1 0.030139720558882234
+recall_10: 0.1502994011976048
+recall_50: 0.34271457085828344
+item_coverage@10: 0.2920
+item_coverage@50: 0.5851
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0085
+kg_cov_dialog@50: 0.0338
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0090
+kg_cov_turn@50: 0.0341
+[Epoch Eval] epoch=12  recall@1=0.030140  recall@10=0.150299  recall@50=0.342715
+[EarlyStop] No epoch-level improvement: 4/5
+[Train][Epoch 13/60][Iter 38000] base_loss=96.695923 div_loss=2.056544 dpp_loss=0.000000 final_loss=98.752464
+[Train][Epoch 13/60][Iter 39000] base_loss=144.144791 div_loss=2.117507 dpp_loss=0.000000 final_loss=146.262299
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:39<00:00,  1.00s/it]
+recall_1 0.028542914171656688
+recall_10: 0.1506986027944112
+recall_50: 0.33712574850299404
+item_coverage@10: 0.3273
+item_coverage@50: 0.6235
+kg_cov_dialog@1: 0.0011
+kg_cov_dialog@10: 0.0090
+kg_cov_dialog@50: 0.0343
+kg_cov_turn@1: 0.0012
+kg_cov_turn@10: 0.0090
+kg_cov_turn@50: 0.0338
+item_coverage@10 new high, saving model...
+item_coverage@50 new high, saving model...
+[Train][Epoch 13/60][Iter 40000] base_loss=111.786713 div_loss=2.019672 dpp_loss=0.000000 final_loss=113.806381
+[Epoch End] 13/60  avg_train_loss=171.435223  epoch_train_time=1900.57s
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [06:39<00:00,  1.00s/it]
+recall_1 0.032335329341317366
+recall_10: 0.14850299401197606
+recall_50: 0.32954091816367265
+item_coverage@10: 0.3134
+item_coverage@50: 0.6112
+kg_cov_dialog@1: 0.0012
+kg_cov_dialog@10: 0.0087
+kg_cov_dialog@50: 0.0339
+kg_cov_turn@1: 0.0013
+kg_cov_turn@10: 0.0090
+kg_cov_turn@50: 0.0340
+[Epoch Eval] epoch=13  recall@1=0.032335  recall@10=0.148503  recall@50=0.329541
+[EarlyStop] No epoch-level improvement: 5/5
+[EarlyStop] Stopping at epoch 13 — recall@10 did not improve for 5 consecutive epochs.
+
+recall_1 0.03053892215568862
+recall_10: 0.150499001996008
+recall_50: 0.3337325349301397
+item_coverage@10: 0.2354
+item_coverage@50: 0.4822
+kg_cov_dialog@1: 0.0013
+kg_cov_dialog@10: 0.0084
+kg_cov_dialog@50: 0.0332
+kg_cov_turn@1: 0.0014
+kg_cov_turn@10: 0.0090
+kg_cov_turn@50: 0.0335
