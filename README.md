@@ -95,3 +95,11 @@ python==3.6.10
 pytorch==1.4.0
 
 torch_geometric==1.6.0
+
+```
+for w in 0.2 0.5 0.7 1.0 1.5 2.0; do
+  BERT_MODEL_NAME=bert-base-chinese python train_tgredial.py --option train \
+    --model_name tg_softild_${w//./p} \
+    --div_loss_weight $w --div_temperature 0.1
+done
+```

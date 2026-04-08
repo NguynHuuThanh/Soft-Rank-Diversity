@@ -1,4 +1,5 @@
-from torch_geometric.data import InMemoryDataset, Dataset, download_url, Data,DataLoader
+from torch_geometric.data import InMemoryDataset, Dataset, download_url, Data
+from torch_geometric.loader import DataLoader
 import os.path as osp
 import numpy as np
 import json

@@ -9,7 +9,7 @@ from termcolor import colored
 from tqdm import tqdm
 import spacy
 from transformers import BertModel,BertTokenizer
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from fuzzywuzzy import fuzz
 
 
