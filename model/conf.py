@@ -117,7 +117,19 @@ def preprocess_tgredial():
     args['generals_dict'] = {}
     args['attribute_dict'] = attribute_dict
     args['movie_count'] = movie_count
-    args['nodes'] = entities  # raw entity name list (no per-node type tag)
+    # Eval code (model/evaluation.py:select_layer_1) expects ReDial-shaped
+    # dicts with `type`/`global` fields. TG-ReDial KG has only entity names,
+    # so we synthesise a minimal schema: Movies vs Attr (anything else gets
+    # the 'Attr' tag, which the eval loops correctly skip for general
+    # category accounting).
+    args['nodes'] = [
+        {
+            'type': 'Movie' if i in movie_ids else 'Attr',
+            'name': name,
+            'global': i,
+        }
+        for i, name in enumerate(entities)
+    ]
 
     movie_kg_neighbors = {}
     movie_kg_relation_types = {}

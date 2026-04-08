@@ -20,6 +20,13 @@ class ProRec(nn.Module):
         if dataset=="redial":
             self.null_idx=30458
             self.num_nodes=30471
+        elif dataset=="tgredial":
+            # TG-ReDial KG: 54,788 entities, 35 relation types. We reserve
+            # the last entity id as the "none" sentinel; the actual KG has
+            # ids 0..54787.
+            self.null_idx=54787
+            self.num_nodes=54788
+            num_relations=35
         else:
             self.null_idx=19307
             self.num_nodes=19308
@@ -51,7 +58,7 @@ class ProRec(nn.Module):
         self.negative_sample_ratio=negative_sample_ratio
 
         self.utter_embedder=Utterance_Embedder(rnn_type,use_bert,utter_embed_size,dropout,num_turns,word_net=word_net)
-        self.graph_embedder=Graph_Embedder(num_nodes=self.num_nodes,embed_size=graph_embed_size,device_str=device_str,word_net=word_net)
+        self.graph_embedder=Graph_Embedder(num_nodes=self.num_nodes,embed_size=graph_embed_size,num_relations=self.num_relations,device_str=device_str,word_net=word_net)
         self.intent_selector=IntentSelector(utter_embed_size,atten_hidden)
         self.graph_walker=Graph_Walker(attention_hidden_dim=atten_hidden,graph_embed_size=graph_embed_size,utterance_embed_size=utter_embed_size,device_str=device_str,nagetive_sample_ratio=negative_sample_ratio,word_net=word_net)
         if self.dataset=="gorecdial":

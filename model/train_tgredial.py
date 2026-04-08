@@ -98,6 +98,7 @@ args['coverage_topk'] = [int(x) for x in t_args.coverage_topk.split(',')]
 if option == "train":
     prorec = ProRec(
         device_str=device_str,
+        dataset="tgredial",
         graph_embed_size=t_args.graph_embed_size,
         utter_embed_size=t_args.utter_embed_size,
         negative_sample_ratio=t_args.negative_sample_ratio,
@@ -280,6 +281,7 @@ elif option == "test":
     state_dict = torch.load(save_path, map_location=device_str)
     prorec = ProRec(
         device_str=device_str,
+        dataset="tgredial",
         graph_embed_size=t_args.graph_embed_size,
         utter_embed_size=t_args.utter_embed_size,
         negative_sample_ratio=t_args.negative_sample_ratio,
@@ -298,6 +300,7 @@ elif option == "test_gen":
     state_dict = torch.load(save_path, map_location=device_str)
     prorec = ProRec(
         device_str=device_str,
+        dataset="tgredial",
         graph_embed_size=t_args.graph_embed_size,
         utter_embed_size=t_args.utter_embed_size,
         negative_sample_ratio=t_args.negative_sample_ratio,
