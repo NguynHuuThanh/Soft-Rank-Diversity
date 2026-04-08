@@ -101,10 +101,11 @@ def compute_item_coverage_gorecdial(all_rec_lists, n_movies):
 
 def compute_item_coverage_redial(all_scores_list, n_movies):
     """
-    Item Coverage@10 and Item Coverage@50 for ReDial.
+    Item Coverage@1, Item Coverage@10 and Item Coverage@50 for ReDial.
     Coverage@k = fraction of catalog items that appear at least once in
     any sample's top-k recommendation list.
     """
+    all_top1_items = set()
     all_top10_items = set()
     all_top50_items = set()
 
@@ -112,18 +113,23 @@ def compute_item_coverage_redial(all_scores_list, n_movies):
         if len(scores) != n_movies:
             continue
         top50_idx = np.argsort(scores)[-50:]
+        top1_idx = top50_idx[-1:]
         top10_idx = top50_idx[-10:]
+        all_top1_items.update(top1_idx.tolist())
         all_top10_items.update(top10_idx.tolist())
         all_top50_items.update(top50_idx.tolist())
 
     if n_movies > 0:
+        coverage_1 = len(all_top1_items) / n_movies
         coverage_10 = len(all_top10_items) / n_movies
         coverage_50 = len(all_top50_items) / n_movies
     else:
+        coverage_1 = 0
         coverage_10 = 0
         coverage_50 = 0
 
     return {
+        'item_coverage@1': coverage_1,
         'item_coverage@10': coverage_10,
         'item_coverage@50': coverage_50
     }

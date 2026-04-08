@@ -66,6 +66,7 @@ save_path=osp.join(root,"saved","best_model_"+t_args.model_name+".pt")
 save_path_1=osp.join(root,"saved","best_model_"+t_args.model_name+"_1.pt")
 save_path_10=osp.join(root,"saved","best_model_"+t_args.model_name+"_10.pt")
 save_path_50=osp.join(root,"saved","best_model_"+t_args.model_name+"_50.pt")
+save_path_cov1=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov1.pt")
 save_path_cov10=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov10.pt")
 save_path_cov50=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov50.pt")
 path=osp.join(root,"data","redial")
@@ -89,6 +90,9 @@ args['coverage_topk']=[int(x) for x in t_args.coverage_topk.split(',')]
 
 if t_args.option=="train":
     prorec=ProRec(device_str=device_str,graph_embed_size=t_args.graph_embed_size,utter_embed_size=t_args.utter_embed_size,negative_sample_ratio=t_args.negative_sample_ratio,atten_hidden=t_args.atten_hidden,word_net=t_args.word_net,div_loss_weight=t_args.div_loss_weight,div_temperature=t_args.div_temperature,dpp_loss_weight=t_args.dpp_loss_weight)
+    best_coverage_1 = 0
+    best_coverage_10 = 0
+    best_coverage_50 = 0
     if t_args.restore_best:
         print("restoring from best checkpoint...")
         state_dict=torch.load(save_path)
@@ -108,17 +112,30 @@ if t_args.option=="train":
                 best_recall_10=stats_all['recall_10'][i]
             if stats_all['recall_50'][i]>best_recall_50:
                 best_recall_50=stats_all['recall_50'][i]
+
+        for _k in args['coverage_topk']:
+            for _m in ['kg_cov_turn','kg_cov_dialog']:
+                stats_all.setdefault(f'{_m}@{_k}', [])
+        stats_all.setdefault('item_coverage@1', [])
+        stats_all.setdefault('item_coverage@10', [])
+        stats_all.setdefault('item_coverage@50', [])
+
+        if len(stats_all['item_coverage@1']) > 0:
+            best_coverage_1 = max(stats_all['item_coverage@1'])
+        if len(stats_all['item_coverage@10']) > 0:
+            best_coverage_10 = max(stats_all['item_coverage@10'])
+        if len(stats_all['item_coverage@50']) > 0:
+            best_coverage_50 = max(stats_all['item_coverage@50'])
     else:
         best_recall_1=0
         best_recall_10=0
         best_recall_50=0
-        best_coverage_10 = 0
-        best_coverage_50 = 0
         stats_all={"recall_1":[],"recall_10":[],"recall_50":[]}
         # Add coverage metric keys
         for _k in args['coverage_topk']:
             for _m in ['kg_cov_turn','kg_cov_dialog']:
                 stats_all[f'{_m}@{_k}']=[]
+        stats_all['item_coverage@1'] = []
         stats_all['item_coverage@10'] = []
         stats_all['item_coverage@50'] = []
 
@@ -225,6 +242,11 @@ if t_args.option=="train":
                     best_coverage_10 = coverage_results['item_coverage@10']
                     print(colored('item_coverage@10 new high, saving model...','green'))
                     torch.save(prorec.state_dict(), save_path_cov10)
+
+                if coverage_results['item_coverage@1'] > best_coverage_1:
+                    best_coverage_1 = coverage_results['item_coverage@1']
+                    print(colored('item_coverage@1 new high, saving model...','green'))
+                    torch.save(prorec.state_dict(), save_path_cov1)
 
                 if coverage_results['item_coverage@50'] > best_coverage_50:
                     best_coverage_50 = coverage_results['item_coverage@50']
