@@ -210,11 +210,16 @@ class TGReDial(InMemoryDataset):
             target_entities = list(target[0][1] or [])
 
         node_candidate1 = list(dict.fromkeys(context_entities + target_entities)) or [0]
-        node_candidate2 = list(node_candidate1)
 
         cand_index = {e: i for i, e in enumerate(node_candidate1)}
         label_1 = [cand_index[e] for e in target_entities if e in cand_index]
-        label_2 = list(label_1)
+
+        # graph_walker expects node_candidate2 / label_2 as list-of-lists
+        # (one depth-2 group per depth-1 pick). TG-ReDial has no depth-2
+        # supervision, so emit empty groups — graph_walker has a `len(item)==0`
+        # branch that handles this by padding with null_idx.
+        node_candidate2 = [[] for _ in label_1]
+        label_2 = [[] for _ in label_1]
 
         movie_rec = list(rec.get("movie_rec") or [])
         items = list(rec.get("items") or [])
