@@ -48,9 +48,9 @@ parser.add_argument("--lr",type=float,default=5e-4)
 parser.add_argument("--weight_decay",type=float,default=0.01)
 parser.add_argument("--eval_batch",type=int,default=5000)
 parser.add_argument("--word_net",action='store_true')
-parser.add_argument("--div_loss_weight",type=float,default=0.0,help="Weight for diversity loss (0 disables)")
-parser.add_argument("--dpp_loss_weight",type=float,default=2.12,help="Weight for DPP loss (0 disables)")
-parser.add_argument("--div_temperature",type=float,default=0.1,help="Temperature for softmax in diversity loss")
+parser.add_argument("--div_loss_weight",type=float,default=1.23,help="Weight for diversity loss (0 disables)")
+parser.add_argument("--dpp_loss_weight",type=float,default=0.0,help="Weight for DPP loss (0 disables)")
+parser.add_argument("--div_temperature",type=float,default=0.5,help="Temperature for softmax in diversity loss")
 parser.add_argument("--coverage_topk",type=str,default="1,10,50",help="Comma-separated k values for coverage metrics")
 parser.add_argument("--log_interval",type=int,default=100,help="Print per-iteration loss every N iterations (0 = silent)")
 parser.add_argument("--early_stop_patience",type=int,default=5,help="Stop if recall@10 not improved for this many epochs")
@@ -274,8 +274,23 @@ if t_args.option=="train":
 
         # ── Epoch-level eval for early stopping ───────────────────────
         prorec.eval()
-        recall_1_ep, recall_10_ep, recall_50_ep, _ = evaluate_rec_redial(test_loader, prorec, graph_data, args)
+        recall_1_ep, recall_10_ep, recall_50_ep, coverage_results_ep = evaluate_rec_redial(test_loader, prorec, graph_data, args)
         print(f"[Epoch Eval] epoch={i+1}  recall@1={recall_1_ep:.6f}  recall@10={recall_10_ep:.6f}  recall@50={recall_50_ep:.6f}")
+
+        if coverage_results_ep['item_coverage@10'] > best_coverage_10:
+            best_coverage_10 = coverage_results_ep['item_coverage@10']
+            print(colored('item_coverage@10 new high (epoch eval), saving model...','green'))
+            torch.save(prorec.state_dict(), save_path_cov10)
+
+        if coverage_results_ep['item_coverage@1'] > best_coverage_1:
+            best_coverage_1 = coverage_results_ep['item_coverage@1']
+            print(colored('item_coverage@1 new high (epoch eval), saving model...','green'))
+            torch.save(prorec.state_dict(), save_path_cov1)
+
+        if coverage_results_ep['item_coverage@50'] > best_coverage_50:
+            best_coverage_50 = coverage_results_ep['item_coverage@50']
+            print(colored('item_coverage@50 new high (epoch eval), saving model...','green'))
+            torch.save(prorec.state_dict(), save_path_cov50)
 
         if recall_10_ep > best_epoch_recall10:
             best_epoch_recall10 = recall_10_ep
