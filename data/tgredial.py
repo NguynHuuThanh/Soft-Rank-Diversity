@@ -68,6 +68,31 @@ def _diff_entities(curr, prev):
     return [e for e in curr if e not in prev_set]
 
 
+def build_id_remap(num_entities, movie_ids):
+    """Return ``old_to_new`` mapping such that movies occupy positions
+    ``0..len(movies)-1`` and non-movies occupy ``len(movies)..N-1``.
+
+    The CR-Walker pipeline assumes "movies" are the first contiguous block
+    of entity ids (true for ReDial, false for TG-ReDial). Remapping fixes
+    eval (`movie_count` == real movie count) and keeps `label_rec` ids
+    aligned with score-vector positions.
+
+    The mapping is deterministic (sorted by original id) so the data
+    loader and `conf.preprocess_tgredial` produce identical results when
+    they each compute it independently.
+    """
+    movie_set = set(int(m) for m in movie_ids)
+    sorted_movies = sorted(m for m in movie_set if 0 <= m < num_entities)
+    sorted_others = sorted(i for i in range(num_entities) if i not in movie_set)
+    old_to_new = [-1] * num_entities
+    for new_id, old in enumerate(sorted_movies):
+        old_to_new[old] = new_id
+    offset = len(sorted_movies)
+    for new_id, old in enumerate(sorted_others):
+        old_to_new[old] = offset + new_id
+    return old_to_new, len(sorted_movies)
+
+
 class TGReDial(InMemoryDataset):
     def __init__(
         self,
@@ -133,21 +158,18 @@ class TGReDial(InMemoryDataset):
         return
 
     # ------------------------------------------------------------------ KG
-    def _build_graph(self, kg, movie_ids):
+    def _build_graph(self, kg, old_to_new, n_movies):
         entities = kg["entity"]
         edges = kg["edge"]
         n_relation = int(kg.get("n_relation", 0))
-
         num_nodes = len(entities)
-        movie_set = set(int(m) for m in movie_ids)
 
-        # 2-dim node feature: [is_movie, is_other]
+        # node_feature row order follows the *new* (post-remap) ids:
+        #   positions 0..n_movies-1 -> Movie
+        #   positions n_movies..N-1  -> Other
         node_feature = torch.zeros(num_nodes, 2)
-        for i in range(num_nodes):
-            if i in movie_set:
-                node_feature[i][0] = 1.0
-            else:
-                node_feature[i][1] = 1.0
+        node_feature[:n_movies, 0] = 1.0
+        node_feature[n_movies:, 1] = 1.0
 
         edge_index = [[], []]
         edge_type = []
@@ -155,8 +177,8 @@ class TGReDial(InMemoryDataset):
             s, d = int(src), int(dst)
             if s >= num_nodes or d >= num_nodes:
                 continue  # skip the 12 stray edges referencing unknown ids
-            edge_index[0].append(s)
-            edge_index[1].append(d)
+            edge_index[0].append(old_to_new[s])
+            edge_index[1].append(old_to_new[d])
             edge_type.append(int(rel))
 
         edge_index = torch.from_numpy(np.array(edge_index)).long()
@@ -168,14 +190,27 @@ class TGReDial(InMemoryDataset):
             num_nodes=num_nodes,
             graph_size=num_nodes,
             node_feature=node_feature,
-            num_movies=len(movie_set),
+            num_movies=n_movies,
             n_relation=n_relation,
         )
 
     # ----------------------------------------------------------- per-record
+    def _remap_ids(self, ids):
+        out = []
+        for e in ids:
+            try:
+                ei = int(e)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= ei < len(self._old_to_new):
+                v = self._old_to_new[ei]
+                if v >= 0:
+                    out.append(v)
+        return out
+
     def _build_record(self, idx, rec, prev_entities, last_turn, intent_clf):
         context_tokens = _flatten_tokens(rec.get("context_tokens") or [])
-        context_entities = list(rec.get("context_entities") or [])
+        context_entities = self._remap_ids(rec.get("context_entities") or [])
         new_mention = _diff_entities(context_entities, prev_entities)
 
         # Pull a native intent hint from `target` (Recommender turns) or
@@ -207,7 +242,7 @@ class TGReDial(InMemoryDataset):
         #                     node_candidate1, if present
         target_entities = []
         if target and isinstance(target[0], (list, tuple)) and len(target[0]) > 1:
-            target_entities = list(target[0][1] or [])
+            target_entities = self._remap_ids(target[0][1] or [])
 
         node_candidate1 = list(dict.fromkeys(context_entities + target_entities)) or [0]
 
@@ -221,8 +256,8 @@ class TGReDial(InMemoryDataset):
         node_candidate2 = [[] for _ in label_1]
         label_2 = [[] for _ in label_1]
 
-        movie_rec = list(rec.get("movie_rec") or [])
-        items = list(rec.get("items") or [])
+        movie_rec = self._remap_ids(rec.get("movie_rec") or [])
+        items = self._remap_ids(rec.get("items") or [])
         is_recommend = intent == "recommend" and bool(items or movie_rec)
         gold_pos = items if is_recommend else []
         label_rec = items if is_recommend else []
@@ -260,6 +295,10 @@ class TGReDial(InMemoryDataset):
             kg = json.load(f)
         with open(movie_path, "r", encoding="utf-8") as f:
             movie_ids = json.load(f)
+
+        # Build the entity-id remap once and stash on self so _build_record
+        # / _build_graph can both consume it.
+        self._old_to_new, self._n_movies = build_id_remap(len(kg["entity"]), movie_ids)
 
         if self._intent_clf is None and ChineseIntentClassifier is not None:
             cache_dir = osp.join(self.root, "processed")
@@ -317,7 +356,7 @@ class TGReDial(InMemoryDataset):
         rec_data, rec_slices = self.collate(rec_list)
         torch.save((rec_data, rec_slices), self.processed_paths[3])
 
-        graph_data = self._build_graph(kg, movie_ids)
+        graph_data = self._build_graph(kg, self._old_to_new, self._n_movies)
         graph_pack, graph_slices = self.collate([graph_data])
         torch.save((graph_pack, graph_slices), self.processed_paths[2])
 
