@@ -258,8 +258,18 @@ class TGReDial(InMemoryDataset):
 
         movie_rec = self._remap_ids(rec.get("movie_rec") or [])
         items = self._remap_ids(rec.get("items") or [])
-        is_recommend = intent == "recommend" and bool(items or movie_rec)
-        gold_pos = items if is_recommend else []
+        # TG-ReDial has NO '允许推荐' (→ "recommend") intent label. Actual
+        # recommendations happen under '请求推荐' or unlabeled turns but
+        # carry non-empty `items`/`movie_rec`. Override intent to
+        # "recommend" when items exist so the eval loop recognises them.
+        if items or movie_rec:
+            intent = "recommend"
+        is_recommend = intent == "recommend"
+        # gold_pos must be a list of 0/1 flags parallel to label_1,
+        # marking which depth-1 picks are true gold targets. In TG-ReDial
+        # all label_1 entries come from the gold target, so flag them all.
+        gold_pos = [1] * len(label_1) if is_recommend else []
+        # label_rec = remapped movie ids for recall computation.
         label_rec = items if is_recommend else []
 
         key = f"{rec.get('user_id', 0)}_{rec.get('time_id', idx)}_{idx}"
