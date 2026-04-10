@@ -103,24 +103,37 @@ def preprocess_tgredial():
         movie_ids = set(int(m) for m in json.load(f))
 
     n_ent = len(entities)
-    # CR-Walker assumes "movies" occupy contiguous entity positions
-    # 0..movie_count-1 (true for ReDial; *not* true for TG-ReDial where
-    # movies are scattered through the entity id space). Pretending the
-    # entire entity range is the candidate space keeps label_rec / score
-    # vector indices aligned. The actual movie set is kept in
-    # args['actual_movie_ids'] for downstream metric computation.
-    args['actual_movie_ids'] = movie_ids
-    args['actual_movie_count'] = len(movie_ids)
-    movie_count = n_ent
+    # Apply the SAME entity-id remap that data/tgredial.py uses, so movies
+    # occupy positions 0..n_movies-1 and the rest of the CR-Walker pipeline
+    # (which assumes a contiguous movie block) just works. Importing here
+    # to avoid pulling torch_geometric at module import time.
+    import sys as _sys
+    _proj = osp.dirname(osp.dirname(osp.abspath(__file__)))
+    if _proj not in _sys.path:
+        _sys.path.insert(0, _proj)
+    from data.tgredial import build_id_remap  # noqa: E402
+
+    old_to_new, n_movies = build_id_remap(n_ent, movie_ids)
+    movie_count = n_movies
+
+    def _new(i):
+        v = old_to_new[i] if 0 <= i < n_ent else -1
+        return v
+
     attribute_dict = [set() for _ in range(n_ent)]
     for src, dst, _rel in edges:
         src_i = int(src); dst_i = int(dst)
         if src_i >= n_ent or dst_i >= n_ent:
             continue  # 12 stray edges in tgredial_kg.json reference unknown ids
-        if src_i in movie_ids:
-            attribute_dict[src_i].add(dst_i)
-        elif dst_i in movie_ids:
-            attribute_dict[src_i].add(dst_i)
+        ns, nd = _new(src_i), _new(dst_i)
+        if ns < 0 or nd < 0:
+            continue
+        # The eval indexes `my_mask[dst]` with dst from attribute_dict[src],
+        # and `my_mask` has length movie_count. So destinations MUST be in
+        # the movie partition (0..movie_count-1). Drop edges to non-movies.
+        if nd >= movie_count:
+            continue
+        attribute_dict[ns].add(nd)
 
     args['generals'] = []
     # TG-ReDial has no name-based general categories like ReDial; use a
@@ -135,14 +148,22 @@ def preprocess_tgredial():
     # so we synthesise a minimal schema: Movies vs Attr (anything else gets
     # the 'Attr' tag, which the eval loops correctly skip for general
     # category accounting).
+    # Build args['nodes'] in the *new* id order: positions 0..movie_count-1
+    # are movies, the rest are non-movie entities.
+    new_to_name = [None] * n_ent
+    for old_id, name in enumerate(entities):
+        new_id = old_to_new[old_id]
+        if 0 <= new_id < n_ent:
+            new_to_name[new_id] = name
     args['nodes'] = [
         {
-            'type': 'Movie' if i in movie_ids else 'Attr',
-            'name': name,
+            'type': 'Movie' if i < movie_count else 'Attr',
+            'name': new_to_name[i] if new_to_name[i] is not None else '',
             'global': i,
         }
-        for i, name in enumerate(entities)
+        for i in range(n_ent)
     ]
+    args['actual_movie_count'] = movie_count
 
     movie_kg_neighbors = {}
     movie_kg_relation_types = {}
@@ -150,9 +171,12 @@ def preprocess_tgredial():
         src_i = int(src); dst_i = int(dst); rel_i = int(rel)
         if src_i >= n_ent or dst_i >= n_ent:
             continue
-        if src_i in movie_ids:
-            movie_kg_neighbors.setdefault(src_i, set()).add(dst_i)
-            movie_kg_relation_types.setdefault(src_i, set()).add(rel_i)
+        ns, nd = _new(src_i), _new(dst_i)
+        if ns < 0 or nd < 0:
+            continue
+        if ns < movie_count:
+            movie_kg_neighbors.setdefault(ns, set()).add(nd)
+            movie_kg_relation_types.setdefault(ns, set()).add(rel_i)
 
     total_reachable = set()
     for ns in movie_kg_neighbors.values():
