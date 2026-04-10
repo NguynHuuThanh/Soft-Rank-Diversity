@@ -69,6 +69,9 @@ save_path_50=osp.join(root,"saved","best_model_"+t_args.model_name+"_50.pt")
 save_path_cov1=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov1.pt")
 save_path_cov10=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov10.pt")
 save_path_cov50=osp.join(root,"saved","best_model_"+t_args.model_name+"_cov50.pt")
+save_path_f1_1=osp.join(root,"saved","best_model_"+t_args.model_name+"_f1at1.pt")
+save_path_f1_10=osp.join(root,"saved","best_model_"+t_args.model_name+"_f1at10.pt")
+save_path_f1_50=osp.join(root,"saved","best_model_"+t_args.model_name+"_f1at50.pt")
 path=osp.join(root,"data","redial")
 redial_train=ReDial(path,flag="train")
 redial_test=ReDial(path,flag="test")
@@ -93,6 +96,9 @@ if t_args.option=="train":
     best_coverage_1 = 0
     best_coverage_10 = 0
     best_coverage_50 = 0
+    best_f1_1 = 0
+    best_f1_10 = 0
+    best_f1_50 = 0
     if t_args.restore_best:
         print("restoring from best checkpoint...")
         state_dict=torch.load(save_path)
@@ -119,6 +125,9 @@ if t_args.option=="train":
         stats_all.setdefault('item_coverage@1', [])
         stats_all.setdefault('item_coverage@10', [])
         stats_all.setdefault('item_coverage@50', [])
+        stats_all.setdefault('f1@1', [])
+        stats_all.setdefault('f1@10', [])
+        stats_all.setdefault('f1@50', [])
 
         if len(stats_all['item_coverage@1']) > 0:
             best_coverage_1 = max(stats_all['item_coverage@1'])
@@ -126,6 +135,12 @@ if t_args.option=="train":
             best_coverage_10 = max(stats_all['item_coverage@10'])
         if len(stats_all['item_coverage@50']) > 0:
             best_coverage_50 = max(stats_all['item_coverage@50'])
+        if len(stats_all['f1@1']) > 0:
+            best_f1_1 = max(stats_all['f1@1'])
+        if len(stats_all['f1@10']) > 0:
+            best_f1_10 = max(stats_all['f1@10'])
+        if len(stats_all['f1@50']) > 0:
+            best_f1_50 = max(stats_all['f1@50'])
     else:
         best_recall_1=0
         best_recall_10=0
@@ -138,6 +153,9 @@ if t_args.option=="train":
         stats_all['item_coverage@1'] = []
         stats_all['item_coverage@10'] = []
         stats_all['item_coverage@50'] = []
+        stats_all['f1@1'] = []
+        stats_all['f1@10'] = []
+        stats_all['f1@50'] = []
 
     unfreeze_layers = ["utter_embedder.rnn","intent_selector","graph_embedder","graph_walker","Wa","Ww"] #"intent_selector"
 
@@ -215,11 +233,14 @@ if t_args.option=="train":
 
             if (num+1) % t_args.eval_batch == 0:
                 prorec.eval()
-                recall_1,recall_10,recall_50,coverage_results=evaluate_rec_redial(test_loader,prorec,graph_data,args)
+                recall_1,recall_10,recall_50,f1_results,coverage_results=evaluate_rec_redial(test_loader,prorec,graph_data,args)
 
                 stats_all['recall_1'].append(recall_1)
                 stats_all['recall_10'].append(recall_10)
                 stats_all['recall_50'].append(recall_50)
+                stats_all['f1@1'].append(f1_results['f1@1'])
+                stats_all['f1@10'].append(f1_results['f1@10'])
+                stats_all['f1@50'].append(f1_results['f1@50'])
                 for cov_key,cov_val in coverage_results.items():
                     if cov_key in stats_all:
                         stats_all[cov_key].append(cov_val)
@@ -237,6 +258,21 @@ if t_args.option=="train":
                     best_recall_50=recall_50
                     print("saving model...")
                     torch.save(prorec.state_dict(),save_path_50)
+
+                if f1_results['f1@1'] > best_f1_1:
+                    best_f1_1 = f1_results['f1@1']
+                    print(colored('f1@1 new high, saving model...','green'))
+                    torch.save(prorec.state_dict(), save_path_f1_1)
+
+                if f1_results['f1@10'] > best_f1_10:
+                    best_f1_10 = f1_results['f1@10']
+                    print(colored('f1@10 new high, saving model...','green'))
+                    torch.save(prorec.state_dict(), save_path_f1_10)
+
+                if f1_results['f1@50'] > best_f1_50:
+                    best_f1_50 = f1_results['f1@50']
+                    print(colored('f1@50 new high, saving model...','green'))
+                    torch.save(prorec.state_dict(), save_path_f1_50)
 
                 if coverage_results['item_coverage@10'] > best_coverage_10:
                     best_coverage_10 = coverage_results['item_coverage@10']
@@ -274,8 +310,23 @@ if t_args.option=="train":
 
         # ── Epoch-level eval for early stopping ───────────────────────
         prorec.eval()
-        recall_1_ep, recall_10_ep, recall_50_ep, coverage_results_ep = evaluate_rec_redial(test_loader, prorec, graph_data, args)
+        recall_1_ep, recall_10_ep, recall_50_ep, f1_results_ep, coverage_results_ep = evaluate_rec_redial(test_loader, prorec, graph_data, args)
         print(f"[Epoch Eval] epoch={i+1}  recall@1={recall_1_ep:.6f}  recall@10={recall_10_ep:.6f}  recall@50={recall_50_ep:.6f}")
+
+        if f1_results_ep['f1@1'] > best_f1_1:
+            best_f1_1 = f1_results_ep['f1@1']
+            print(colored('f1@1 new high (epoch eval), saving model...','green'))
+            torch.save(prorec.state_dict(), save_path_f1_1)
+
+        if f1_results_ep['f1@10'] > best_f1_10:
+            best_f1_10 = f1_results_ep['f1@10']
+            print(colored('f1@10 new high (epoch eval), saving model...','green'))
+            torch.save(prorec.state_dict(), save_path_f1_10)
+
+        if f1_results_ep['f1@50'] > best_f1_50:
+            best_f1_50 = f1_results_ep['f1@50']
+            print(colored('f1@50 new high (epoch eval), saving model...','green'))
+            torch.save(prorec.state_dict(), save_path_f1_50)
 
         if coverage_results_ep['item_coverage@10'] > best_coverage_10:
             best_coverage_10 = coverage_results_ep['item_coverage@10']
@@ -312,7 +363,7 @@ elif t_args.option=="test":
     prorec.load_state_dict(state_dict,strict=False)
     prorec.eval()
     prorec.to(device)
-    recall_1,recall_10,recall_50,coverage_results=evaluate_rec_redial(test_loader,prorec,graph_data,args)
+    recall_1,recall_10,recall_50,f1_results,coverage_results=evaluate_rec_redial(test_loader,prorec,graph_data,args)
 
 elif t_args.option=="test_gen":
     print("testing model generation...")

@@ -401,12 +401,13 @@ def select_layer_2(step,step_grp,grp_batch,intent_label,node_candidate2,batch_si
         
 def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eval_batch=None):
 
-    recall_1=0
-    recall_10=0
-    recall_50=0
+    hit_1=0
+    hit_10=0
+    hit_50=0
     intent_accuracy=0
     da_distrib=[0,0,0]
     tot_rec=0
+    recommend_turns=0
     tot=0
     
     # Coverage accumulators
@@ -480,6 +481,7 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
                 my_label=test_batch.label_rec[num]
                 wrong_count=[0 for _ in range(len(my_label))]
                 if test_batch.intent[num]=="recommend":
+                    recommend_turns += 1
                     # item_ids for ReDial are movie indices 0..movie_count-1
                     item_ids = list(range(args['movie_count']))
                     scores_arr = all_scores[num]
@@ -498,11 +500,11 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
                     for item in wrong_count:
                         tot_rec+=1
                         if item<2:
-                            recall_1+=1
+                            hit_1+=1
                         if item<11:
-                            recall_10+=1
+                            hit_10+=1
                         if item<51:
-                            recall_50+=1
+                            hit_50+=1
 
                 # Dialog boundary: flush dialog-level coverage
                 if test_batch.last_turn[num]==1 and len(dialog_rec_items) > 0:
@@ -517,9 +519,27 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
             batches+=1
             tot+=cur_batch_size
 
-    recall_1=recall_1/tot_rec
-    recall_10=recall_10/tot_rec
-    recall_50=recall_50/tot_rec
+    recall_1=hit_1/tot_rec if tot_rec > 0 else 0.0
+    recall_10=hit_10/tot_rec if tot_rec > 0 else 0.0
+    recall_50=hit_50/tot_rec if tot_rec > 0 else 0.0
+
+    precision_1 = hit_1 / max(recommend_turns * 1, 1)
+    precision_10 = hit_10 / max(recommend_turns * 10, 1)
+    precision_50 = hit_50 / max(recommend_turns * 50, 1)
+
+    def _f1(precision, recall):
+        if precision + recall == 0:
+            return 0.0
+        return 2 * precision * recall / (precision + recall)
+
+    f1_1 = _f1(precision_1, recall_1)
+    f1_10 = _f1(precision_10, recall_10)
+    f1_50 = _f1(precision_50, recall_50)
+    f1_results = {
+        'f1@1': f1_1,
+        'f1@10': f1_10,
+        'f1@50': f1_50,
+    }
 
     coverage_results = finalize_coverage(cov_acc, k_values)
     item_coverage_results = compute_item_coverage_redial(all_scores_list, args['movie_count'])
@@ -528,10 +548,13 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
     print("recall_1",recall_1)
     print('recall_10:',recall_10)
     print("recall_50:",recall_50)
+    print("f1@1:", f1_1)
+    print("f1@10:", f1_10)
+    print("f1@50:", f1_50)
     for key, val in sorted(coverage_results.items()):
         print(f"{key}: {val:.4f}")
 
-    return recall_1,recall_10,recall_50,coverage_results
+    return recall_1,recall_10,recall_50,f1_results,coverage_results
     
 
 def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_data,args,eval_batch=None):
