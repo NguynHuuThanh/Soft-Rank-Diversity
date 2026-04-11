@@ -103,3 +103,85 @@ for w in 0.2 0.5 0.7 1.0 1.5 2.0; do
     --div_loss_weight $w --div_temperature 0.1
 done
 ```
+
+## Save-model and metric logic (single-file reference)
+
+This project computes `f1@k` and `item_coverage@k` in `model/evaluation.py` and uses those values to save best checkpoints inside `model/train_tgredial.py` (same pattern in `model/train_redial.py`).
+
+### 1) How `f1@1/10/50` is computed
+
+In `evaluate_rec_redial(...)`:
+
+- Recall:
+  - `recall@k = hit_k / tot_rec`
+- Precision:
+  - `precision@1 = hit_1 / (recommend_turns * 1)`
+  - `precision@10 = hit_10 / (recommend_turns * 10)`
+  - `precision@50 = hit_50 / (recommend_turns * 50)`
+- F1 per k:
+  - `f1@k = 0` when `precision@k + recall@k == 0`
+  - otherwise `f1@k = 2 * precision@k * recall@k / (precision@k + recall@k)`
+
+Returned as:
+
+```python
+f1_results = {
+    'f1@1': f1_1,
+    'f1@10': f1_10,
+    'f1@50': f1_50,
+}
+```
+
+### 2) How `item_coverage@1/10/50` is computed
+
+In `compute_item_coverage_redial(all_scores_list, n_movies)`:
+
+1. For each recommendation score vector (`scores`) with length `n_movies`:
+   - `top50_idx = np.argsort(scores)[-50:]`
+   - `top10_idx = top50_idx[-10:]`
+   - `top1_idx = top50_idx[-1:]`
+2. Add those indices into global sets:
+   - `all_top1_items`, `all_top10_items`, `all_top50_items`
+3. Coverage is unique recommended items over catalog size:
+   - `item_coverage@1 = len(all_top1_items) / n_movies`
+   - `item_coverage@10 = len(all_top10_items) / n_movies`
+   - `item_coverage@50 = len(all_top50_items) / n_movies`
+
+Then `evaluate_rec_redial(...)` merges it into `coverage_results` and prints:
+
+```python
+item_coverage_results = compute_item_coverage_redial(all_scores_list, args['movie_count'])
+coverage_results.update(item_coverage_results)
+```
+
+### 3) When model checkpoints are saved
+
+In training (`train_tgredial.py` / `train_redial.py`), best-so-far values are tracked:
+
+- Recall checkpoints:
+  - `best_recall_1`, `best_recall_10`, `best_recall_50`
+- F1 checkpoints:
+  - `best_f1_1`, `best_f1_10`, `best_f1_50`
+- Item-coverage checkpoints:
+  - `best_coverage_1`, `best_coverage_10`, `best_coverage_50`
+
+On every evaluation pass (both mid-epoch eval and epoch-end eval), if current metric is strictly greater than historical best, save current state dict:
+
+```python
+if f1_results['f1@50'] > best_f1_50:
+    best_f1_50 = f1_results['f1@50']
+    torch.save(prorec.state_dict(), save_path_f1_50)
+
+if coverage_results['item_coverage@10'] > best_coverage_10:
+    best_coverage_10 = coverage_results['item_coverage@10']
+    torch.save(prorec.state_dict(), save_path_cov10)
+```
+
+Checkpoint filenames:
+
+- Overall/baseline: `saved/best_model_<model_name>.pt`
+- Recall-specific: `..._1.pt`, `..._10.pt`, `..._50.pt`
+- Coverage-specific: `..._cov1.pt`, `..._cov10.pt`, `..._cov50.pt`
+- F1-specific: `..._f1at1.pt`, `..._f1at10.pt`, `..._f1at50.pt`
+
+This is exactly why logs such as `f1@50 new high ... saving model...` and `item_coverage@10 new high ... saving model...` appear during training.
