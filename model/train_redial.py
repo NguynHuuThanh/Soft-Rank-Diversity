@@ -50,7 +50,7 @@ parser.add_argument("--eval_batch",type=int,default=5000)
 parser.add_argument("--word_net",action='store_true')
 parser.add_argument("--div_loss_weight",type=float,default=1.23,help="Weight for diversity loss (0 disables)")
 parser.add_argument("--dpp_loss_weight",type=float,default=0.0,help="Weight for DPP loss (0 disables)")
-parser.add_argument("--div_temperature",type=float,default=0.5,help="Temperature for softmax in diversity loss")
+parser.add_argument("--div_temperature",type=float,default=0.1,help="Temperature for softmax in diversity loss")
 parser.add_argument("--coverage_topk",type=str,default="1,10,50",help="Comma-separated k values for coverage metrics")
 parser.add_argument("--log_interval",type=int,default=100,help="Print per-iteration loss every N iterations (0 = silent)")
 parser.add_argument("--early_stop_patience",type=int,default=5,help="Stop if recall@10 not improved for this many epochs")
@@ -192,7 +192,9 @@ if t_args.option=="train":
                 loss=prorec.forward_pretrain(tokenized_dialog,all_length,maxlen,init_hidden,edge_type,edge_index,alignment_index,alignment_batch_index,alignment_label,intent_label,alignment_index_word,alignment_batch_index_word,alignment_label_word)
                 loss.backward()
                 optimizer.step()
-                print("pretrain iter ",num_pretrain,":",loss.item())
+                # print("pretrain iter ",num_pretrain,":",loss.item())
+                if num_pretrain % 1000 == 0:
+                    print(f"[Pretrain][Epoch {i+1}/{pretrain_epoch}][Iter {num_pretrain}] loss={loss.item():.6f}")
                 num_pretrain+=1
    
 

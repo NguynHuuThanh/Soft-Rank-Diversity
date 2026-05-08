@@ -156,30 +156,6 @@ class ProRec(nn.Module):
 
         return torch.mean(torch.stack(dpp_losses))
 
-        
-        utter_embed=self.utter_embedder.forward(tokenized_dialog,all_length,maxlen,init_hidden)
-        #last_utter=utter_embed[:,-1,:]
-        #print(last_utter)
-        intent=self.intent_selector.forward(utter_embed)
-        #print(alignment_index)
-        graph_embed,word_embed=self.graph_embedder.forward(edge_type,edge_index)
-        graph_features=graph_embed.index_select(0,alignment_index)
-        
-        tiled_utter=self.graph_walker.tile_context(utter_embed,alignment_batch_index)
-        logits=torch.sum(self.Wa(tiled_utter)*graph_features,dim=-1)
-
-        loss_a=self.alignment_loss(logits,alignment_label)
-        intent_loss=self.intent_loss(intent,intent_label)
-
-        if self.word_net:
-            tiled_utter_word=self.graph_walker.tile_context(utter_embed,alignment_batch_index_word)
-            word_features=word_embed.index_select(0,alignment_index_word)
-            logits_w=torch.sum(self.Ww(tiled_utter_word)*word_features,dim=-1)
-            loss_b=self.alignment_loss_word(logits_w,alignment_label_word)
-            return loss_a+loss_b+intent_loss
-        else:
-            return loss_a+intent_loss
-
     
     def prepare_reg(self,mention_history,dialog_history,intent=None,rec_cand=None):
         alignment_index=[]
@@ -394,6 +370,31 @@ class ProRec(nn.Module):
             
         
         return tokenized_dialog,all_length,maxlen,init_hidden,edge_type,edge_index,alignment_index,alignment_batch_index,alignment_label,intent_label,alignment_index_word,alignment_batch_index_word,alignment_label_word
+
+
+    def forward_pretrain(self,tokenized_dialog,all_length,maxlen,init_hidden,edge_type,edge_index,alignment_index,alignment_batch_index,alignment_label,intent_label,alignment_index_word=None,alignment_batch_index_word=None,alignment_label_word=None):
+        utter_embed=self.utter_embedder.forward(tokenized_dialog,all_length,maxlen,init_hidden)
+        #last_utter=utter_embed[:,-1,:]
+        #print(last_utter)
+        intent=self.intent_selector.forward(utter_embed)
+        #print(alignment_index)
+        graph_embed,word_embed=self.graph_embedder.forward(edge_type,edge_index)
+        graph_features=graph_embed.index_select(0,alignment_index)
+        
+        tiled_utter=self.graph_walker.tile_context(utter_embed,alignment_batch_index)
+        logits=torch.sum(self.Wa(tiled_utter)*graph_features,dim=-1)
+
+        loss_a=self.alignment_loss(logits,alignment_label)
+        intent_loss=self.intent_loss(intent,intent_label)
+
+        if self.word_net:
+            tiled_utter_word=self.graph_walker.tile_context(utter_embed,alignment_batch_index_word)
+            word_features=word_embed.index_select(0,alignment_index_word)
+            logits_w=torch.sum(self.Ww(tiled_utter_word)*word_features,dim=-1)
+            loss_b=self.alignment_loss_word(logits_w,alignment_label_word)
+            return loss_a+loss_b+intent_loss
+        else:
+            return loss_a+intent_loss
 
     
     def forward(self,tokenized_dialog,all_length,maxlen,init_hidden,edge_type,edge_index,mention_index,mention_batch_index,sel_indices,sel_batch_indices,sel_group_indices,grp_batch_indices,last_indices,intent_indices,intent_label,label_1,label_2,score_masks,alignment_index,alignment_batch_index,alignment_label,word_index=None,word_batch_index=None,alignment_index_word=None,alignment_batch_index_word=None,alignment_label_word=None):

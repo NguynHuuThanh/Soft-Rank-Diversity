@@ -135,6 +135,61 @@ def compute_item_coverage_redial(all_scores_list, n_movies):
     }
 
 
+def compute_ild(topk_item_ids, movie_kg_neighbors):
+    """
+    Intra-List Diversity (ILD): average pairwise Jaccard distance
+    among the top-k recommended items.
+    """
+    n = len(topk_item_ids)
+    if n <= 1:
+        return 0.0
+
+    pair_sum = 0.0
+    pair_cnt = 0
+    for i in range(n):
+        a = movie_kg_neighbors.get(topk_item_ids[i], set())
+        for j in range(i + 1, n):
+            b = movie_kg_neighbors.get(topk_item_ids[j], set())
+            union = a | b
+            if len(union) == 0:
+                dist = 0.0
+            else:
+                dist = 1.0 - (len(a & b) / len(union))
+            pair_sum += dist
+            pair_cnt += 1
+    return pair_sum / max(pair_cnt, 1)
+
+
+def init_ild_accumulators(k_values):
+    """Return fresh ILD accumulator dicts for all k."""
+    acc = {}
+    for k in k_values:
+        acc[f'ild@{k}'] = []
+    return acc
+
+
+def accumulate_ild(acc, scores_array, item_ids, k_values, movie_kg_neighbors):
+    """
+    Compute ILD@k from score-ranked items and append to accumulators.
+    """
+    ranked_indices = sorted(range(len(scores_array)), key=lambda x: -scores_array[x])
+    ranked_items = [item_ids[i] for i in ranked_indices]
+
+    for k in k_values:
+        topk = ranked_items[:k]
+        acc[f'ild@{k}'].append(compute_ild(topk, movie_kg_neighbors))
+
+
+def finalize_ild(acc, k_values):
+    """Average ILD accumulator lists and return a flat results dict."""
+    results = {}
+    for k in k_values:
+        key = f'ild@{k}'
+        vals = acc[key]
+        results[key] = sum(vals) / max(len(vals), 1)
+    return results
+
+
 def select_intent(sel_intent,mentioned,args):
     device=torch.device('cuda:0')
     attribute_types=set([ 'Person', 'Time', 'Genre', 'Subject'])
@@ -413,6 +468,7 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
     # Coverage accumulators
     k_values = args.get('coverage_topk', [1, 10, 50])
     cov_acc = init_coverage_accumulators(k_values)
+    ild_acc = init_ild_accumulators(k_values)
     # Per-dialog tracking: accumulate item ids recommended within a dialog
     dialog_rec_items = []  # flat list of movie ids recommended so far in current dialog
     # For Item Coverage@k across all recommend samples
@@ -488,6 +544,8 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
                     all_scores_list.append(scores_arr)
                     # Per-turn coverage
                     turn_vals = accumulate_turn_coverage(cov_acc, scores_arr, item_ids, k_values, args)
+                    # Per-turn ILD
+                    accumulate_ild(ild_acc, scores_arr, item_ids, k_values, args['movie_kg_neighbors'])
                     # Collect top-k items for dialog-level coverage (use max k)
                     max_k = max(k_values)
                     ranked = sorted(range(len(scores_arr)), key=lambda x: -scores_arr[x])
@@ -523,27 +581,25 @@ def evaluate_rec_redial(test_loader:DataLoader, model:ProRec,graph_data,args,eva
     recall_10=hit_10/tot_rec if tot_rec > 0 else 0.0
     recall_50=hit_50/tot_rec if tot_rec > 0 else 0.0
 
-    precision_1 = hit_1 / max(recommend_turns * 1, 1)
-    precision_10 = hit_10 / max(recommend_turns * 10, 1)
-    precision_50 = hit_50 / max(recommend_turns * 50, 1)
+    coverage_results = finalize_coverage(cov_acc, k_values)
+    item_coverage_results = compute_item_coverage_redial(all_scores_list, args['movie_count'])
+    ild_results = finalize_ild(ild_acc, k_values)
+    coverage_results.update(item_coverage_results)
+    coverage_results.update(ild_results)
 
-    def _f1(precision, recall):
-        if precision + recall == 0:
+    def _f1(recall, coverage):
+        if recall + coverage == 0:
             return 0.0
-        return 2 * precision * recall / (precision + recall)
+        return 2 * recall * coverage / (recall + coverage)
 
-    f1_1 = _f1(precision_1, recall_1)
-    f1_10 = _f1(precision_10, recall_10)
-    f1_50 = _f1(precision_50, recall_50)
+    f1_1 = _f1(recall_1, coverage_results.get('item_coverage@1', 0.0))
+    f1_10 = _f1(recall_10, coverage_results.get('item_coverage@10', 0.0))
+    f1_50 = _f1(recall_50, coverage_results.get('item_coverage@50', 0.0))
     f1_results = {
         'f1@1': f1_1,
         'f1@10': f1_10,
         'f1@50': f1_50,
     }
-
-    coverage_results = finalize_coverage(cov_acc, k_values)
-    item_coverage_results = compute_item_coverage_redial(all_scores_list, args['movie_count'])
-    coverage_results.update(item_coverage_results)
 
     print("recall_1",recall_1)
     print('recall_10:',recall_10)
@@ -587,6 +643,7 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
     # Coverage accumulators
     k_values = args.get('coverage_topk', [1, 10, 50])
     cov_acc = init_coverage_accumulators(k_values)
+    ild_acc = init_ild_accumulators(k_values)
     dialog_rec_items = []  # accumulate recommended item ids within a dialog
     all_rec_lists = []
     with torch.no_grad():
@@ -641,6 +698,7 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
                 cand_ids = shuffled_rec_cand[num]  # list of 5 movie ids
                 all_rec_lists.append(cand_ids)
                 turn_vals = accumulate_turn_coverage(cov_acc, score_ex_np, cand_ids, k_values, args)
+                accumulate_ild(ild_acc, score_ex_np, cand_ids, k_values, args['movie_kg_neighbors'])
                 # Collect top items for dialog-level coverage
                 max_k = max(k_values)
                 ranked_idx = sorted(range(len(score_ex_np)), key=lambda x: -score_ex_np[x])
@@ -716,7 +774,9 @@ def evaluate_rec_gorecdial(test_loader:DataLoader, model:ProRec,graph_data, bow_
 
     coverage_results = finalize_coverage(cov_acc, k_values)
     item_coverage_results = compute_item_coverage_gorecdial(all_rec_lists, args['movie_count'])
+    ild_results = finalize_ild(ild_acc, k_values)
     coverage_results.update(item_coverage_results)
+    coverage_results.update(ild_results)
 
     intent_accuracy=intent_accuracy/tot_turns
     print("turn_1",turn_1)
