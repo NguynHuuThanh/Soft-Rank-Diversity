@@ -74,13 +74,17 @@ class KBRD(nn.Module):
         kg,
         entity_kg_emb,
         entity_text_emb,
-        num_bases
+        num_bases,
+        div_loss_weight=0.0,
+        div_temperature=0.1
     ):
         super(KBRD, self).__init__()
 
         self.n_entity = n_entity
         self.n_relation = n_relation
         self.dim = dim
+        self.div_loss_weight = div_loss_weight
+        self.div_temperature = div_temperature
 
         self.entity_emb = nn.Embedding(self.n_entity, self.dim)
         self.relation_emb = nn.Embedding(self.n_relation, self.dim)
@@ -109,6 +113,35 @@ class KBRD(nn.Module):
                     triples.append([entity, relation, tail])
         return triples
 
+    def compute_diversity_loss(self, scores, item_embeddings, mask=None):
+        """
+        Soft top-k diversity loss: penalises high pairwise cosine similarity
+        among the items that receive the most probability mass.
+
+        Args:
+            scores:          [B, M]  raw recommendation logits
+            item_embeddings: [M, d]  RGCN node embeddings for the M candidate items
+            mask:            [B, M]  optional binary mask (1 = valid candidate)
+        Returns:
+            scalar diversity loss (to be *minimized*)
+        """
+        tau = self.div_temperature
+        # Temperature-scaled softmax  →  soft item-selection weights  [B, M]
+        scaled = scores / tau
+        if mask is not None:
+            scaled = scaled + (1.0 - mask) * (-1e9)   # mask out invalid items
+        w = F.softmax(scaled, dim=-1)                  # [B, M]
+
+        # Cosine similarity matrix S = Ê Êᵀ  where Ê is row-normalised
+        normed = F.normalize(item_embeddings, p=2, dim=-1)  # [M, d]
+        # Efficient: compute Sw = S @ wᵀ row-by-row via (normed @ normed.T) @ w.T
+        #   = normed @ (normed.T @ w.T)   →  avoids materialising M×M matrix
+        #   inner: [d, M] @ [M, B] → [d, B]   then outer: [M, d] @ [d, B] → [M, B]
+        Sw = torch.mm(normed, torch.mm(normed.t(), w.t()))   # [M, B]
+        # Per-user weighted similarity: wᵢ · (Swᵢ)  →  sum over M
+        weighted_sim = (w * Sw.t()).sum(dim=-1)               # [B]
+        return weighted_sim.mean()
+
     def forward(
         self,
         seed_sets: list,
@@ -121,6 +154,11 @@ class KBRD(nn.Module):
         base_loss = self.criterion(scores, labels)
 
         loss = base_loss
+        
+        # Add diversity loss if enabled
+        if self.div_loss_weight > 0:
+            div_loss = self.compute_diversity_loss(scores, nodes_features)
+            loss = loss + self.div_loss_weight * div_loss
 
         return dict(scores=scores.detach(), base_loss=base_loss, loss=loss)
 

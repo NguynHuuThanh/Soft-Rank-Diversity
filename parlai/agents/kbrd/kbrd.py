@@ -84,6 +84,14 @@ class KbrdAgent(TorchAgent):
             "-lr", "--learningrate", type=float, default=3e-3, help="learning rate"
         )
         agent.add_argument("-nb", "--num-bases", type=int, default=8)
+        agent.add_argument(
+            "--div-loss-weight", type=float, default=1.23,
+            help="diversity loss weight (0 = disabled)"
+        )
+        agent.add_argument(
+            "--div-temperature", type=float, default=0.1,
+            help="temperature parameter for soft top-k softmax in diversity loss"
+        )
         KbrdAgent.dictionary_class().add_cmdline_args(argparser)
         return agent
 
@@ -93,6 +101,8 @@ class KbrdAgent(TorchAgent):
 
         self.id = "KbrdAgent"
         self.n_entity = opt["n_entity"]
+        self.div_loss_weight = opt.get("div_loss_weight", 0.0)
+        self.div_temperature = opt.get("div_temperature", 0.1)
 
         if not shared:
             # set up model from scratch
@@ -118,7 +128,9 @@ class KbrdAgent(TorchAgent):
                 kg=self.kg,
                 entity_kg_emb=entity_kg_emb,
                 entity_text_emb=entity_text_emb,
-                num_bases=opt["num_bases"]
+                num_bases=opt["num_bases"],
+                div_loss_weight=self.div_loss_weight,
+                div_temperature=self.div_temperature
             )
             if init_model is not None:
                 # load model parameters if available
@@ -143,6 +155,10 @@ class KbrdAgent(TorchAgent):
 
         self.metrics = defaultdict(float)
         self.counts = defaultdict(int)
+        # Track unique items for item coverage
+        self.all_top1_items = set()
+        self.all_top10_items = set()
+        self.all_top50_items = set()
 
     def report(self):
         """
@@ -164,6 +180,14 @@ class KbrdAgent(TorchAgent):
             if x.startswith("recall") and self.counts[x] > 200:
                 m[x] = self.metrics[x] / self.counts[x]
                 m["num_tokens_" + x] = self.counts[x]
+        
+        # Item coverage metrics (unique items across all recommendations)
+        n_movies = len(self.movie_ids)
+        if n_movies > 0:
+            m["item_coverage@1"] = len(self.all_top1_items) / n_movies
+            m["item_coverage@10"] = len(self.all_top10_items) / n_movies
+            m["item_coverage@50"] = len(self.all_top50_items) / n_movies
+        
         for k, v in m.items():
             # clean up: rounds to sigfigs and converts tensors to floats
             base[k] = round_sigfigs(v, 4)
@@ -174,6 +198,10 @@ class KbrdAgent(TorchAgent):
             self.metrics[key] = 0.0
         for key in self.counts:
             self.counts[key] = 0
+        # Reset item coverage trackers
+        self.all_top1_items = set()
+        self.all_top10_items = set()
+        self.all_top50_items = set()
 
     def share(self):
         """Share internal states."""
@@ -297,4 +325,15 @@ class KbrdAgent(TorchAgent):
             self.counts[f"recall@1"] += 1
             self.counts[f"recall@10"] += 1
             self.counts[f"recall@50"] += 1
+            
+            # Track unique items for item coverage metrics
+            # pred_idx contains indices into self.movie_ids
+            top1_item = pred_idx[b][0].item()
+            top10_items = pred_idx[b][:10].tolist()
+            top50_items = pred_idx[b][:50].tolist()
+            
+            self.all_top1_items.add(self.movie_ids[top1_item])
+            self.all_top10_items.update([self.movie_ids[idx] for idx in top10_items])
+            self.all_top50_items.update([self.movie_ids[idx] for idx in top50_items])
+        
         return Output(list(map(lambda x: str(self.movie_ids[x]), outputs.argmax(dim=1).tolist())))
