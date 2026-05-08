@@ -1,0 +1,8 @@
+/myenv/*
+*.pkl
+
+_pycache__/
+*.pyc
+
+*.pt
+*.npy

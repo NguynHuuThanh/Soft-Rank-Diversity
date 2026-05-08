@@ -75,6 +75,8 @@ class CrossModel(nn.Module):
         super().__init__()  # self.pad_idx, self.start_idx, self.end_idx)
         self.batch_size = opt['batch_size']
         self.max_r_length = opt['max_r_length']
+        self.div_loss_weight = opt.get('diversity_weight', 0.0)
+        self.div_temperature = opt.get('diversity_temperature', 0.1)
 
         self.NULL_IDX = padding_idx
         self.END_IDX = end_idx
@@ -142,6 +144,8 @@ class CrossModel(nn.Module):
         self.info_output_con = nn.Linear(opt['dim'], opt['n_concept']+1)
         self.info_con_loss = nn.MSELoss(size_average=False,reduce=False)
         self.info_db_loss = nn.MSELoss(size_average=False,reduce=False)
+
+        self.movie_ids = pkl.load(open("data/movie_ids.pkl", "rb"))
 
         self.user_representation_to_bias_1 = nn.Linear(opt['dim'], 512)
         self.user_representation_to_bias_2 = nn.Linear(512, len(dictionary) + 4)
@@ -325,6 +329,30 @@ class CrossModel(nn.Module):
 
         return torch.mean(info_db_loss), torch.mean(info_con_loss)
 
+    def compute_diversity_loss(self, scores, item_embeddings, mask=None):
+        """
+        Soft top-k diversity loss over recommendation scores.
+
+        Args:
+            scores: [B, M] raw recommendation logits
+            item_embeddings: [M, d] item embeddings for the candidate items
+            mask: [B, M] optional binary mask where 1 marks valid candidates
+        Returns:
+            scalar loss to minimize
+        """
+        scaled = scores / self.div_temperature
+        if mask is not None:
+            scaled = scaled + (1.0 - mask.float()) * (-1e9)
+
+        item_weights = F.softmax(scaled, dim=-1)
+        normed_features = F.normalize(item_embeddings, p=2, dim=-1)
+
+        # Efficient quadratic form: w^T (E E^T) w without materializing E E^T.
+        sw = torch.mm(normed_features.t(), item_weights.t())
+        sw = torch.mm(normed_features, sw)
+        weighted_sim = (item_weights * sw.t()).sum(dim=-1)
+        return weighted_sim.mean()
+
     def forward(self, xs, ys, mask_ys, concept_mask, db_mask, seed_sets, labels, con_label, db_label, entity_vector, rec, test=True, cand_params=None, prev_enc=None, maxlen=None,
                 bsz=None):
         """
@@ -414,6 +442,13 @@ class CrossModel(nn.Module):
         rec_loss=self.criterion(entity_scores.squeeze(1).squeeze(1).float(), labels.cuda())
         #rec_loss=self.klloss(entity_scores.squeeze(1).squeeze(1).float(), labels.float().cuda())
         rec_loss = torch.sum(rec_loss*rec.float().cuda())
+
+        if self.div_loss_weight > 0:
+            movie_ids = torch.as_tensor(self.movie_ids, dtype=torch.long, device=entity_scores.device)
+            movie_scores = entity_scores[:, movie_ids]
+            movie_embeddings = db_nodes_features[movie_ids]
+            div_loss = self.compute_diversity_loss(movie_scores, movie_embeddings)
+            rec_loss = rec_loss + self.div_loss_weight * div_loss
 
         self.user_rep=user_emb
 
@@ -537,6 +572,7 @@ class CrossModel(nn.Module):
         return loss
 
     def save_model(self):
+        os.makedirs('saved_model', exist_ok=True)
         torch.save(self.state_dict(), 'saved_model/net_parameter1.pkl')
 
     def load_model(self):

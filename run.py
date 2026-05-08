@@ -27,7 +27,7 @@ import numpy as np
 from tqdm import tqdm
 from math import exp
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='3'
+os.environ['CUDA_VISIBLE_DEVICES']='0'
 import signal
 import json
 import argparse
@@ -88,6 +88,8 @@ def setup_args():
     train.add_argument("-n_hop","--n_hop",type=int,default=2)
     train.add_argument("-kge_weight","--kge_weight",type=float,default=1)
     train.add_argument("-l2_weight","--l2_weight",type=float,default=2.5e-6)
+    train.add_argument("-diversity_weight","--diversity_weight",type=float,default=0.0)
+    train.add_argument("-diversity_temperature","--diversity_temperature",type=float,default=3)
     train.add_argument("-n_memory","--n_memory",type=float,default=32)
     train.add_argument("-item_update_mode","--item_update_mode",type=str,default='0,1')
     train.add_argument("-using_all_hops","--using_all_hops",type=bool,default=True)
@@ -105,6 +107,7 @@ class TrainLoop_fusion_rec():
 
         self.batch_size=self.opt['batch_size']
         self.epoch=self.opt['epoch']
+        self.movieid2idx = None
 
         self.use_cuda=opt['use_cuda']
         if opt['load_dict']!=None:
@@ -114,6 +117,7 @@ class TrainLoop_fusion_rec():
         self.is_finetune=False
 
         self.movie_ids = pkl.load(open("data/movie_ids.pkl", "rb"))
+        self.movieid2idx = {movie_id: idx for idx, movie_id in enumerate(self.movie_ids)}
         # Note: we cannot change the type of metrics ahead of time, so you
         # should correctly initialize to floats or ints here
 
@@ -222,34 +226,58 @@ class TrainLoop_fusion_rec():
 
         _=self.val(is_test=True)
 
-    def metrics_cal_rec(self,rec_loss,scores,labels):
+    def metrics_cal_rec(self, rec_loss, scores, labels):
         batch_size = len(labels.view(-1).tolist())
         self.metrics_rec["loss"] += rec_loss
         outputs = scores.cpu()
         outputs = outputs[:, torch.LongTensor(self.movie_ids)]
-        _, pred_idx = torch.topk(outputs, k=100, dim=1)
+        topk = min(50, outputs.size(1))
+        _, pred_idx = torch.topk(outputs, k=topk, dim=1)
+        
+        if not hasattr(self, 'all_recommended_movies_1'):
+            self.all_recommended_movies_1 = set()
+        if not hasattr(self, 'all_recommended_movies_10'):
+            self.all_recommended_movies_10 = set()
+        if not hasattr(self, 'all_recommended_movies_50'):
+            self.all_recommended_movies_50 = set()
+        
         for b in range(batch_size):
-            if labels[b].item()==0:
+            if labels[b].item() == 0:
                 continue
-            target_idx = self.movie_ids.index(labels[b].item())
+            target_idx = self.movieid2idx[labels[b].item()]
             self.metrics_rec["recall@1"] += int(target_idx in pred_idx[b][:1].tolist())
             self.metrics_rec["recall@10"] += int(target_idx in pred_idx[b][:10].tolist())
             self.metrics_rec["recall@50"] += int(target_idx in pred_idx[b][:50].tolist())
             self.metrics_rec["count"] += 1
+        
+        # Track coverage: unique movies from top-1, top-10, top-50 across all samples
+        for b in range(batch_size):
+            topk_1 = pred_idx[b][:1].tolist()
+            topk_10 = pred_idx[b][:10].tolist()
+            topk_50 = pred_idx[b][:50].tolist()
+            for idx in topk_1:
+                self.all_recommended_movies_1.add(self.movie_ids[idx])
+            for idx in topk_10:
+                self.all_recommended_movies_10.add(self.movie_ids[idx])
+            for idx in topk_50:
+                self.all_recommended_movies_50.add(self.movie_ids[idx])
 
-    def val(self,is_test=False):
-        self.metrics_gen={"ppl":0,"dist1":0,"dist2":0,"dist3":0,"dist4":0,"bleu1":0,"bleu2":0,"bleu3":0,"bleu4":0,"count":0}
-        self.metrics_rec={"recall@1":0,"recall@10":0,"recall@50":0,"loss":0,"gate":0,"count":0,'gate_count':0}
+    def val(self, is_test=False):
+        self.metrics_gen = {"ppl": 0, "dist1": 0, "dist2": 0, "dist3": 0, "dist4": 0, "bleu1": 0, "bleu2": 0, "bleu3": 0, "bleu4": 0, "count": 0}
+        self.metrics_rec = {"recall@1": 0, "recall@10": 0, "recall@50": 0, "loss": 0, "gate": 0, "count": 0, 'gate_count': 0}
+        self.all_recommended_movies_1 = set()
+        self.all_recommended_movies_10 = set()
+        self.all_recommended_movies_50 = set()
         self.model.eval()
         if is_test:
             val_dataset = dataset('data/test_data.jsonl', self.opt)
         else:
             val_dataset = dataset('data/valid_data.jsonl', self.opt)
-        val_set=CRSdataset(val_dataset.data_process(),self.opt['n_entity'],self.opt['n_concept'])
+        val_set = CRSdataset(val_dataset.data_process(), self.opt['n_entity'], self.opt['n_concept'])
         val_dataset_loader = torch.utils.data.DataLoader(dataset=val_set,
-                                                           batch_size=self.batch_size,
-                                                           shuffle=False)
-        recs=[]
+                                                          batch_size=self.batch_size,
+                                                          shuffle=False)
+        recs = []
         for context, c_lengths, response, r_length, mask_response, mask_r_length, entity, entity_vector, movie, concept_mask, dbpedia_mask, concept_vec, db_vec, rec in tqdm(val_dataset_loader):
             with torch.no_grad():
                 seed_sets = []
@@ -260,11 +288,18 @@ class TrainLoop_fusion_rec():
                 scores, preds, rec_scores, rec_loss, _, mask_loss, info_db_loss, info_con_loss = self.model(context.cuda(), response.cuda(), mask_response.cuda(), concept_mask, dbpedia_mask, seed_sets, movie, concept_vec, db_vec, entity_vector.cuda(), rec, test=True, maxlen=20, bsz=batch_size)
 
             recs.extend(rec.cpu())
-            #print(losses)
-            #exit()
             self.metrics_cal_rec(rec_loss, rec_scores, movie)
 
-        output_dict_rec={key: self.metrics_rec[key] / self.metrics_rec['count'] for key in self.metrics_rec}
+        output_dict_rec = {}
+        for key, value in self.metrics_rec.items():
+            if isinstance(value, set):
+                continue
+            output_dict_rec[key] = value / self.metrics_rec['count'] if self.metrics_rec['count'] > 0 else 0
+        
+        n_movies = len(self.movie_ids)
+        output_dict_rec["coverage@1"] = len(self.all_recommended_movies_1) / n_movies if n_movies > 0 else 0
+        output_dict_rec["coverage@10"] = len(self.all_recommended_movies_10) / n_movies if n_movies > 0 else 0
+        output_dict_rec["coverage@50"] = len(self.all_recommended_movies_50) / n_movies if n_movies > 0 else 0
         print(output_dict_rec)
 
         return output_dict_rec
